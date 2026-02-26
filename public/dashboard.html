@@ -270,84 +270,256 @@
     </div>
 
     <div class="dashboard-shell">
-      <div class="max-w-7xl mx-auto px-5 py-5">
-        <div class="grid grid-cols-1 xl:grid-cols-12 gap-4">
-      <!-- Left Column - Income Tracker & Let's Connect -->
-      <div class="xl:col-span-8 space-y-4">
-        <!-- Strategies Card -->
-        <div class="bg-white rounded-3xl p-6 shadow-sm">
-          <div class="flex items-start justify-between mb-4">
-            <div>
-              <div class="flex items-center gap-3 mb-2">
-                <div class="p-2 bg-slate-100 rounded-lg">
-                  <svg class="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-                  </svg>
+      <div class="max-w-7xl mx-auto px-5 py-5 space-y-4">
+        <div class="flex items-center gap-4 border-b border-slate-200 pb-2">
+          <button id="tabOverview" type="button" class="text-sm font-semibold text-slate-900 border-b-2 border-slate-900 pb-2">
+            Overview
+          </button>
+          <button id="tabStrategies" type="button" class="text-sm font-medium text-slate-500 hover:text-slate-800 pb-2">
+            Strategies
+          </button>
+        </div>
+
+        <div id="tabOverviewPanel">
+          <div class="grid grid-cols-1 xl:grid-cols-12 gap-4">
+            <!-- Left Column - Overview strategies & stats -->
+            <div class="xl:col-span-8 space-y-4">
+              <!-- Strategies Card -->
+              <div class="bg-white rounded-3xl p-6 shadow-sm">
+                <div class="flex items-start justify-between mb-4">
+                  <div>
+                    <div class="flex items-center gap-3 mb-2">
+                      <div class="p-2 bg-slate-100 rounded-lg">
+                        <svg class="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                        </svg>
+                      </div>
+                      <h2 class="text-2xl font-semibold text-slate-800">Strategies</h2>
+                    </div>
+                    <p class="text-slate-500 text-sm">
+                      Live strategies pulled from your database.
+                    </p>
+                  </div>
                 </div>
-                <h2 class="text-2xl font-semibold text-slate-800">Strategies</h2>
+
+                <div id="strategyChart" class="relative h-72 rounded-3xl overflow-hidden mb-4"></div>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3" id="userStatsCards">
+                  <div class="border border-slate-200 rounded-2xl p-3 bg-white">
+                    <p class="text-xs text-slate-500">Total users</p>
+                    <p class="text-xl font-semibold text-slate-800" id="totalUsersValue">0</p>
+                  </div>
+                  <div class="border border-slate-200 rounded-2xl p-3 bg-white">
+                    <p class="text-xs text-slate-500">Users KYC (Completed)</p>
+                    <p class="text-xl font-semibold text-slate-800" id="usersKycValue">0</p>
+                  </div>
+                  <div class="border border-slate-200 rounded-2xl p-3 bg-white">
+                    <p class="text-xs text-slate-500">Users linked bank</p>
+                    <p class="text-xl font-semibold text-slate-800" id="usersBankValue">0</p>
+                  </div>
+                </div>
               </div>
-              <p class="text-slate-500 text-sm">
-                Live strategies pulled from your database.
-              </p>
-            </div>
-          </div>
 
-          <div id="strategyChart" class="relative h-72 rounded-3xl overflow-hidden mb-4"></div>
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3" id="userStatsCards">
-            <div class="border border-slate-200 rounded-2xl p-3 bg-white">
-              <p class="text-xs text-slate-500">Total users</p>
-              <p class="text-xl font-semibold text-slate-800" id="totalUsersValue">0</p>
+              <!-- Featured Strategies Card -->
+              <div class="bg-white rounded-3xl p-6 shadow-sm">
+                <div class="flex items-center justify-between mb-4">
+                  <h2 class="text-xl font-semibold text-slate-800">Featured strategies</h2>
+                  <span class="text-xs text-slate-500" id="featuredCount">0 featured</span>
+                </div>
+
+                <div class="space-y-3" id="featuredStrategies"></div>
+              </div>
             </div>
-            <div class="border border-slate-200 rounded-2xl p-3 bg-white">
-              <p class="text-xs text-slate-500">Users KYC (Completed)</p>
-              <p class="text-xl font-semibold text-slate-800" id="usersKycValue">0</p>
-            </div>
-            <div class="border border-slate-200 rounded-2xl p-3 bg-white">
-              <p class="text-xs text-slate-500">Users linked bank</p>
-              <p class="text-xl font-semibold text-slate-800" id="usersBankValue">0</p>
+
+            <!-- Right Column - Top holdings & All strategies summary -->
+            <div class="xl:col-span-4 space-y-4">
+              <!-- Top Performing Holdings -->
+              <div class="bg-white rounded-3xl p-5 shadow-sm">
+                <div class="flex items-center justify-between mb-4">
+                  <h2 class="text-xl font-semibold text-slate-800">Top performing holdings</h2>
+                  <span class="text-xs text-slate-500" id="topHoldingsCount">0 holdings</span>
+                </div>
+
+                <div class="space-y-3" id="topHoldingsList"></div>
+              </div>
+
+              <!-- All Strategies (simple view) -->
+              <div class="bg-white rounded-3xl p-5 shadow-sm">
+                <div class="flex items-center justify-between mb-4">
+                  <h2 class="text-xl font-semibold text-slate-800">All strategies</h2>
+                  <div class="flex items-center gap-2">
+                    <span class="text-xs text-slate-500" id="totalCount">0 total</span>
+                    <select id="allStrategiesFilter" class="text-xs border border-slate-300 rounded-lg px-2 py-1 bg-white text-slate-700">
+                      <option value="all">All strategies</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="space-y-3 strategy-scroll-list" id="allStrategiesList"></div>
+              </div>
+
             </div>
           </div>
         </div>
 
-        <!-- Featured Strategies Card -->
-        <div class="bg-white rounded-3xl p-6 shadow-sm">
-          <div class="flex items-center justify-between mb-4">
-            <h2 class="text-xl font-semibold text-slate-800">Featured strategies</h2>
-            <span class="text-xs text-slate-500" id="featuredCount">0 featured</span>
+        <div id="tabStrategiesPanel" class="hidden">
+          <div class="grid grid-cols-1 xl:grid-cols-12 gap-5">
+            <!-- Left column: add form -->
+            <section class="xl:col-span-5 space-y-4">
+              <div class="bg-white rounded-3xl p-5 shadow-sm border border-slate-100">
+                <div class="flex items-start justify-between mb-4">
+                  <div>
+                    <h2 class="text-lg font-semibold text-slate-900">Add new strategy</h2>
+                    <p class="text-xs text-slate-500 mt-1">Capture the basics for a new strategy on the platform.</p>
+                  </div>
+                </div>
+
+                <form id="strategyForm" class="space-y-3">
+                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label class="block text-xs font-medium text-slate-600 mb-1" for="strategyName">Strategy name</label>
+                      <input id="strategyName" name="name" type="text" required
+                        class="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500"
+                        placeholder="Global Growth Fund" />
+                    </div>
+                    <div>
+                      <label class="block text-xs font-medium text-slate-600 mb-1" for="strategyShortName">Short name</label>
+                      <input id="strategyShortName" name="short_name" type="text"
+                        class="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500"
+                        placeholder="GGF" />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label class="block text-xs font-medium text-slate-600 mb-1" for="strategyDescription">Description / objective</label>
+                    <textarea id="strategyDescription" name="description" rows="3"
+                      class="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500 resize-none"
+                      placeholder="Briefly describe what this strategy aims to achieve."></textarea>
+                  </div>
+
+                  <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label class="block text-xs font-medium text-slate-600 mb-1" for="strategyRisk">Risk level</label>
+                      <select id="strategyRisk" name="risk_level"
+                        class="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500">
+                        <option value="">Unspecified</option>
+                        <option value="low">Low</option>
+                        <option value="medium">Medium</option>
+                        <option value="high">High</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label class="block text-xs font-medium text-slate-600 mb-1" for="strategySector">Sector</label>
+                      <input id="strategySector" name="sector" type="text"
+                        class="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500"
+                        placeholder="Multi-asset, Equity, Income…" />
+                    </div>
+                    <div>
+                      <label class="block text-xs font-medium text-slate-600 mb-1" for="strategyMinInvestment">Minimum investment</label>
+                      <input id="strategyMinInvestment" name="min_investment" type="number" min="0" step="1"
+                        class="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500"
+                        placeholder="e.g. 50000" />
+                    </div>
+                  </div>
+
+                  <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label class="block text-xs font-medium text-slate-600 mb-1" for="strategyCurrency">Base currency</label>
+                      <input id="strategyCurrency" name="base_currency" type="text"
+                        class="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500"
+                        placeholder="ZAR" />
+                    </div>
+                    <div class="flex items-center gap-2 mt-5 sm:mt-6">
+                      <input id="strategyIsPublic" name="is_public" type="checkbox"
+                        class="rounded border-slate-300 text-violet-600 focus:ring-violet-500" />
+                      <label for="strategyIsPublic" class="text-xs text-slate-700">Public strategy</label>
+                    </div>
+                    <div class="flex items-center gap-2 mt-2 sm:mt-6">
+                      <input id="strategyIsFeatured" name="is_featured" type="checkbox"
+                        class="rounded border-slate-300 text-violet-600 focus:ring-violet-500" />
+                      <label for="strategyIsFeatured" class="text-xs text-slate-700">Featured</label>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label class="block text-xs font-medium text-slate-600 mb-1">Included assets</label>
+                    <p class="text-[11px] text-slate-500 mb-2">Pick existing assets from your securities universe to include in this strategy.</p>
+                    <div class="border border-slate-200 rounded-2xl p-3 bg-slate-50 space-y-2">
+                      <div class="flex items-center gap-2">
+                        <input
+                          id="strategyAssetsSearch"
+                          type="search"
+                          placeholder="Search assets by name or symbol…"
+                          class="w-full border border-slate-300 rounded-full px-3 py-1 text-xs bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500"
+                        />
+                      </div>
+                      <div id="strategyAssetsSelected" class="flex flex-wrap gap-1 min-h-[1.5rem]">
+                        <!-- selected asset pills -->
+                      </div>
+                      <div class="max-h-40 overflow-y-auto rounded-xl bg-white border border-slate-200" id="strategyAssetsList">
+                        <!-- searchable asset list -->
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="flex items-center justify-between pt-2">
+                    <p id="strategyFormMessage" class="text-xs text-slate-500"></p>
+                    <button type="submit"
+                      class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-violet-600 text-white text-sm font-semibold shadow-sm hover:bg-violet-700 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-1">
+                      <span>Save strategy</span>
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </section>
+
+            <!-- Right column: list + filters + top 5 -->
+            <section class="xl:col-span-7 space-y-4">
+              <div class="bg-white rounded-3xl p-5 shadow-sm border border-slate-100">
+                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+                  <div>
+                    <h2 class="text-lg font-semibold text-slate-900">All strategies</h2>
+                    <p class="text-xs text-slate-500 mt-1">Use filters and sort options to quickly find a strategy.</p>
+                  </div>
+                  <div class="flex flex-wrap items-center gap-2 text-xs">
+                    <input id="strategySearch" type="search" placeholder="Search strategies…"
+                      class="border border-slate-300 rounded-full px-3 py-1 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500">
+                    <select id="filterRisk"
+                      class="border border-slate-300 rounded-full px-3 py-1 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500">
+                      <option value="">All risks</option>
+                      <option value="low">Low</option>
+                      <option value="medium">Medium</option>
+                      <option value="high">High</option>
+                    </select>
+                    <select id="filterVisibility"
+                      class="border border-slate-300 rounded-full px-3 py-1 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500">
+                      <option value="">All visibility</option>
+                      <option value="public">Public only</option>
+                      <option value="featured">Featured only</option>
+                    </select>
+                    <select id="sortBy"
+                      class="border border-slate-300 rounded-full px-3 py-1 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500">
+                      <option value="recent">Newest first</option>
+                      <option value="name">Name A–Z</option>
+                      <option value="min_investment_desc">Min investment high → low</option>
+                      <option value="min_investment_asc">Min investment low → high</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div id="strategiesList" class="strategy-scroll-list space-y-3 text-sm text-slate-600">
+                </div>
+              </div>
+
+              <div class="bg-white rounded-3xl p-5 shadow-sm border border-slate-100">
+                <div class="flex items-center justify-between mb-4">
+                  <h2 class="text-lg font-semibold text-slate-900">Top 5 performing strategies</h2>
+                  <span id="top5Badge" class="text-xs text-slate-500">0 strategies</span>
+                </div>
+                <div id="topStrategiesList" class="space-y-3 text-sm text-slate-600"></div>
+              </div>
+            </section>
           </div>
-
-          <div class="space-y-3" id="featuredStrategies"></div>
         </div>
-      </div>
-
-      <!-- Right Column - Projects & Proposal Progress -->
-      <div class="xl:col-span-4 space-y-4">
-        <!-- Top Performing Holdings -->
-        <div class="bg-white rounded-3xl p-5 shadow-sm">
-          <div class="flex items-center justify-between mb-4">
-            <h2 class="text-xl font-semibold text-slate-800">Top performing holdings</h2>
-            <span class="text-xs text-slate-500" id="topHoldingsCount">0 holdings</span>
-          </div>
-
-          <div class="space-y-3" id="topHoldingsList"></div>
-        </div>
-
-        <!-- All Strategies -->
-        <div class="bg-white rounded-3xl p-5 shadow-sm">
-          <div class="flex items-center justify-between mb-4">
-            <h2 class="text-xl font-semibold text-slate-800">All strategies</h2>
-            <div class="flex items-center gap-2">
-              <span class="text-xs text-slate-500" id="totalCount">0 total</span>
-              <select id="allStrategiesFilter" class="text-xs border border-slate-300 rounded-lg px-2 py-1 bg-white text-slate-700">
-                <option value="all">All strategies</option>
-              </select>
-            </div>
-          </div>
-
-          <div class="space-y-3 strategy-scroll-list" id="allStrategiesList"></div>
-        </div>
-
-      </div>
       </div>
     </div>
   </main>
@@ -375,6 +547,27 @@
     const usersKycValue = document.getElementById('usersKycValue');
     const usersBankValue = document.getElementById('usersBankValue');
     let allStrategiesData = [];
+    let allStrategiesFullData = [];
+    let allSecuritiesForStrategies = [];
+    let selectedSecurityIdsForStrategy = new Set();
+
+    const tabOverview = document.getElementById('tabOverview');
+    const tabStrategies = document.getElementById('tabStrategies');
+    const tabOverviewPanel = document.getElementById('tabOverviewPanel');
+    const tabStrategiesPanel = document.getElementById('tabStrategiesPanel');
+
+    const strategySearch = document.getElementById('strategySearch');
+    const strategyForm = document.getElementById('strategyForm');
+    const strategyFormMessage = document.getElementById('strategyFormMessage');
+    const strategiesList = document.getElementById('strategiesList');
+    const topStrategiesList = document.getElementById('topStrategiesList');
+    const top5Badge = document.getElementById('top5Badge');
+    const filterRisk = document.getElementById('filterRisk');
+    const filterVisibility = document.getElementById('filterVisibility');
+    const sortBy = document.getElementById('sortBy');
+    const strategyAssetsSearch = document.getElementById('strategyAssetsSearch');
+    const strategyAssetsSelected = document.getElementById('strategyAssetsSelected');
+    const strategyAssetsList = document.getElementById('strategyAssetsList');
 
     const formatCurrency = (value, currency = 'ZAR') => {
       if (value === null || value === undefined) return 'No minimum';
@@ -501,6 +694,190 @@
         return;
       }
       items.forEach(item => container.appendChild(renderStrategyItem(item)));
+    };
+
+    const renderSelectedAssetsPills = () => {
+      if (!strategyAssetsSelected) return;
+      strategyAssetsSelected.innerHTML = '';
+      if (!selectedSecurityIdsForStrategy.size) {
+        const empty = document.createElement('span');
+        empty.className = 'text-[11px] text-slate-400';
+        empty.textContent = 'No assets selected yet.';
+        strategyAssetsSelected.appendChild(empty);
+        return;
+      }
+
+      Array.from(selectedSecurityIdsForStrategy).forEach((id) => {
+        const asset = allSecuritiesForStrategies.find((s) => String(s.id) === String(id));
+        const label = asset ? `${asset.symbol || ''} ${asset.name ? '· ' + asset.name : ''}`.trim() : id;
+        const pill = document.createElement('button');
+        pill.type = 'button';
+        pill.className = 'flex items-center gap-1 px-2 py-0.5 rounded-full bg-violet-100 text-violet-800 text-[11px]';
+        pill.innerHTML = `<span>${label}</span><span class="text-[13px] leading-none">&times;</span>`;
+        pill.addEventListener('click', () => {
+          selectedSecurityIdsForStrategy.delete(id);
+          renderSelectedAssetsPills();
+          renderAssetsPickerList();
+        });
+        strategyAssetsSelected.appendChild(pill);
+      });
+    };
+
+    const renderAssetsPickerList = () => {
+      if (!strategyAssetsList) return;
+      strategyAssetsList.innerHTML = '';
+
+      const term = (strategyAssetsSearch?.value || '').trim().toLowerCase();
+      let items = [...allSecuritiesForStrategies];
+      if (term) {
+        items = items.filter((item) => {
+          const text = `${item.symbol || ''} ${item.name || ''}`.toLowerCase();
+          return text.includes(term);
+        });
+      }
+
+      if (!items.length) {
+        const empty = document.createElement('div');
+        empty.className = 'px-3 py-2 text-[11px] text-slate-500';
+        empty.textContent = term ? 'No assets match your search.' : 'No assets available.';
+        strategyAssetsList.appendChild(empty);
+        return;
+      }
+
+      items.forEach((item) => {
+        const isSelected = selectedSecurityIdsForStrategy.has(String(item.id));
+        const row = document.createElement('button');
+        row.type = 'button';
+        row.className = `w-full flex items-center justify-between px-3 py-1.5 text-[11px] border-b border-slate-100 last:border-b-0 hover:bg-slate-50 ${isSelected ? 'bg-violet-50' : ''}`;
+        row.innerHTML = `
+          <div class="flex items-center gap-2 min-w-0">
+            <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-slate-100 text-[10px] text-slate-700 font-semibold">
+              ${(item.symbol || item.name || '?').slice(0, 2).toUpperCase()}
+            </span>
+            <span class="truncate">${item.name || 'Unnamed asset'}</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-[10px] text-slate-400">${item.symbol || ''}</span>
+            <span class="w-4 h-4 rounded-full border ${isSelected ? 'bg-violet-600 border-violet-600' : 'border-slate-300'}"></span>
+          </div>
+        `;
+        row.addEventListener('click', () => {
+          const key = String(item.id);
+          if (selectedSecurityIdsForStrategy.has(key)) {
+            selectedSecurityIdsForStrategy.delete(key);
+          } else {
+            selectedSecurityIdsForStrategy.add(key);
+          }
+          renderSelectedAssetsPills();
+          renderAssetsPickerList();
+        });
+        strategyAssetsList.appendChild(row);
+      });
+    };
+
+    const applyStrategiesFiltersAndRender = () => {
+      if (!strategiesList) return;
+      let items = [...allStrategiesFullData];
+
+      const searchText = (strategySearch?.value || '').trim().toLowerCase();
+      if (searchText) {
+        items = items.filter((item) => {
+          const text = [
+            item.name,
+            item.short_name,
+            item.description,
+            item.objective,
+            item.sector
+          ].filter(Boolean).join(' ').toLowerCase();
+          return text.includes(searchText);
+        });
+      }
+
+      const riskValue = filterRisk?.value || '';
+      if (riskValue) {
+        items = items.filter((item) => (item.risk_level || '').toLowerCase() === riskValue);
+      }
+
+      const visValue = filterVisibility?.value || '';
+      if (visValue === 'public') {
+        items = items.filter((item) => item.is_public);
+      } else if (visValue === 'featured') {
+        items = items.filter((item) => item.is_featured);
+      }
+
+      const sortValue = sortBy?.value || 'recent';
+      if (sortValue === 'name') {
+        items.sort((a, b) => (a.short_name || a.name || '').localeCompare(b.short_name || b.name || ''));
+      } else if (sortValue === 'min_investment_desc') {
+        items.sort((a, b) => (Number(b.min_investment) || 0) - (Number(a.min_investment) || 0));
+      } else if (sortValue === 'min_investment_asc') {
+        items.sort((a, b) => (Number(a.min_investment) || 0) - (Number(b.min_investment) || 0));
+      } else {
+        items.sort((a, b) => {
+          const aCreated = a.created_at ? new Date(a.created_at).getTime() : 0;
+          const bCreated = b.created_at ? new Date(b.created_at).getTime() : 0;
+          return bCreated - aCreated;
+        });
+      }
+
+      strategiesList.innerHTML = '';
+      if (!items.length) {
+        const empty = document.createElement('div');
+        empty.className = 'text-sm text-slate-500';
+        empty.textContent = 'No strategies match your filters.';
+        strategiesList.appendChild(empty);
+        return;
+      }
+
+      items.forEach((item) => strategiesList.appendChild(renderStrategyItem(item)));
+    };
+
+    const renderTop5Strategies = () => {
+      if (!topStrategiesList) return;
+      const scored = [...allStrategiesFullData].map((item) => ({
+        item,
+        score: Number(item.min_investment) || 0
+      }));
+
+      scored.sort((a, b) => b.score - a.score);
+      const top5 = scored.slice(0, 5).map((entry) => entry.item);
+
+      topStrategiesList.innerHTML = '';
+      if (!top5.length) {
+        const empty = document.createElement('div');
+        empty.className = 'text-sm text-slate-500';
+        empty.textContent = 'No strategies available yet.';
+        topStrategiesList.appendChild(empty);
+      } else {
+        top5.forEach((strategy, index) => {
+          const row = document.createElement('div');
+          row.className = 'border border-slate-200 rounded-2xl p-3 flex items-center justify-between gap-3';
+
+          const name = strategy.short_name || strategy.name || 'Untitled strategy';
+          const currency = strategy.base_currency || 'ZAR';
+          const minInvestment = formatCurrency(strategy.min_investment, currency);
+
+          row.innerHTML = `
+            <div class="flex items-center gap-3 min-w-0">
+              <div class="w-7 h-7 rounded-full bg-slate-900 text-xs text-white flex items-center justify-center font-semibold">${index + 1}</div>
+              <div class="min-w-0">
+                <p class="text-sm font-medium text-slate-900 truncate">${name}</p>
+                <p class="text-xs text-slate-500 truncate">Min investment: ${minInvestment}</p>
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              ${strategy.is_featured ? '<span class="px-2 py-0.5 text-[10px] rounded-full bg-amber-100 text-amber-700 font-semibold">Featured</span>' : ''}
+              ${strategy.is_public ? '<span class="px-2 py-0.5 text-[10px] rounded-full bg-emerald-100 text-emerald-700 font-semibold">Public</span>' : ''}
+            </div>
+          `;
+
+          topStrategiesList.appendChild(row);
+        });
+      }
+
+      if (top5Badge) {
+        top5Badge.textContent = `${top5.length} strategies`;
+      }
     };
 
     const buildStrategyChart = (strategies) => {
@@ -840,26 +1217,103 @@
     const loadStrategies = async () => {
       const { data, error } = await supabaseClient
         .from('strategies')
-        .select('id, name, short_name, description, objective, risk_level, sector, min_investment, base_currency, is_featured, is_public, status')
-        .eq('is_public', true)
+        .select('id, name, short_name, description, objective, risk_level, sector, min_investment, base_currency, is_featured, is_public, status, created_at, security_ids')
         .order('created_at', { ascending: false });
 
       if (error) {
         console.error('Strategies load error:', error);
         renderList(featuredStrategies, [], 'No featured strategies available.');
         renderList(allStrategiesList, [], 'No strategies found.');
+        if (strategiesList) {
+          strategiesList.innerHTML = '<div class="text-sm text-slate-500">Could not load strategies.</div>';
+        }
+        if (topStrategiesList) {
+          topStrategiesList.innerHTML = '<div class="text-sm text-slate-500">Could not load strategies.</div>';
+        }
+        if (top5Badge) top5Badge.textContent = '0 strategies';
         return;
       }
 
       const strategies = data || [];
-      const featured = strategies.filter(item => item.is_featured);
-      allStrategiesData = strategies;
+      const featured = strategies.filter(item => item.is_featured && item.is_public);
+      const publicOnly = strategies.filter(item => item.is_public);
+
+      allStrategiesData = publicOnly;
+      allStrategiesFullData = strategies;
 
       renderList(featuredStrategies, featured.slice(0, 3), 'No featured strategies yet.');
-      populateAllStrategiesFilter(strategies);
+      populateAllStrategiesFilter(publicOnly);
       renderAllStrategiesByFilter();
-      buildStrategyChart(strategies);
-      updateStats(strategies);
+      buildStrategyChart(publicOnly);
+      updateStats(publicOnly);
+      applyStrategiesFiltersAndRender();
+      renderTop5Strategies();
+    };
+
+    const showFormMessage = (text, type = 'info') => {
+      if (!strategyFormMessage) return;
+      strategyFormMessage.textContent = text || '';
+      strategyFormMessage.className = 'text-xs ' + (type === 'error'
+        ? 'text-rose-600'
+        : type === 'success'
+          ? 'text-emerald-600'
+          : 'text-slate-500');
+    };
+
+    const handleStrategySubmit = async (event) => {
+      event.preventDefault();
+      if (!strategyForm) return;
+
+      const formData = new FormData(strategyForm);
+      const payload = {
+        name: (formData.get('name') || '').toString().trim() || null,
+        short_name: (formData.get('short_name') || '').toString().trim() || null,
+        description: (formData.get('description') || '').toString().trim() || null,
+        objective: (formData.get('description') || '').toString().trim() || null,
+        risk_level: (formData.get('risk_level') || '').toString().trim() || null,
+        sector: (formData.get('sector') || '').toString().trim() || null,
+        min_investment: formData.get('min_investment') ? Number(formData.get('min_investment')) : null,
+        base_currency: (formData.get('base_currency') || '').toString().trim() || 'ZAR',
+        is_public: strategyForm.querySelector('#strategyIsPublic')?.checked || false,
+        is_featured: strategyForm.querySelector('#strategyIsFeatured')?.checked || false,
+        security_ids: Array.from(selectedSecurityIdsForStrategy)
+      };
+
+      if (!payload.name) {
+        showFormMessage('Please provide at least a strategy name.', 'error');
+        return;
+      }
+
+      showFormMessage('Saving strategy…', 'info');
+
+      const submitButton = strategyForm.querySelector('button[type="submit"]');
+      const originalText = submitButton ? submitButton.innerHTML : '';
+      if (submitButton) {
+        submitButton.disabled = true;
+        submitButton.innerHTML = '<span>Saving…</span>';
+      }
+
+      const { error } = await supabaseClient
+        .from('strategies')
+        .insert([payload]);
+
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.innerHTML = originalText || '<span>Save strategy</span>';
+      }
+
+      if (error) {
+        console.error('Failed to create strategy', error);
+        showFormMessage('Could not save strategy. Please try again.', 'error');
+        return;
+      }
+
+      strategyForm.reset();
+      selectedSecurityIdsForStrategy = new Set();
+      renderSelectedAssetsPills();
+      renderAssetsPickerList();
+      showFormMessage('Strategy saved successfully.', 'success');
+      await loadStrategies();
     };
 
     const loadUserStats = async () => {
@@ -1057,9 +1511,62 @@
       allStrategiesFilter.addEventListener('change', renderAllStrategiesByFilter);
     }
 
+    if (strategyForm) {
+      strategyForm.addEventListener('submit', handleStrategySubmit);
+    }
+
+    if (strategySearch) {
+      strategySearch.addEventListener('input', () => applyStrategiesFiltersAndRender());
+    }
+
+    [filterRisk, filterVisibility, sortBy].forEach((el) => {
+      if (el) {
+        el.addEventListener('change', () => applyStrategiesFiltersAndRender());
+      }
+    });
+
+    if (strategyAssetsSearch) {
+      strategyAssetsSearch.addEventListener('input', () => renderAssetsPickerList());
+    }
+
+    if (tabOverview && tabStrategies && tabOverviewPanel && tabStrategiesPanel) {
+      tabOverview.addEventListener('click', () => {
+        tabOverviewPanel.classList.remove('hidden');
+        tabStrategiesPanel.classList.add('hidden');
+        tabOverview.classList.add('border-b-2', 'border-slate-900', 'text-slate-900', 'font-semibold');
+        tabStrategies.classList.remove('border-b-2', 'border-slate-900', 'font-semibold');
+        tabStrategies.classList.add('text-slate-500');
+      });
+
+      tabStrategies.addEventListener('click', () => {
+        tabOverviewPanel.classList.add('hidden');
+        tabStrategiesPanel.classList.remove('hidden');
+        tabStrategies.classList.add('border-b-2', 'border-slate-900', 'text-slate-900', 'font-semibold');
+        tabOverview.classList.remove('border-b-2', 'border-slate-900', 'font-semibold');
+        tabOverview.classList.add('text-slate-500');
+      });
+    }
+
     // Initialize everything on page load
-    window.addEventListener('DOMContentLoaded', function() {
-      requireSession();
+    window.addEventListener('DOMContentLoaded', async function() {
+      const ok = await requireSession();
+      if (!ok) return;
+
+      const { data: securitiesRows, error: securitiesError } = await supabaseClient
+        .from('securities')
+        .select('id, symbol, name')
+        .order('name', { ascending: true });
+
+      if (securitiesError) {
+        console.error('Securities load error (strategies picker):', securitiesError);
+        allSecuritiesForStrategies = [];
+      } else {
+        allSecuritiesForStrategies = securitiesRows || [];
+      }
+
+      renderSelectedAssetsPills();
+      renderAssetsPickerList();
+
       loadStrategies();
       loadTopHoldings();
       loadUserStats();
