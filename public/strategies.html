@@ -386,6 +386,18 @@
       }
     };
 
+    const createStrategySlug = (value) => {
+      const base = String(value || '')
+        .toLowerCase()
+        .trim()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 48);
+      const fallback = base || 'strategy';
+      const unique = Date.now().toString(36).slice(-6);
+      return `${fallback}-${unique}`;
+    };
+
     const formatCurrency = (value, currency = 'ZAR') => {
       if (value === null || value === undefined) return 'No minimum';
       const numeric = Number(value);
@@ -577,6 +589,7 @@
 
       const formData = new FormData(strategyForm);
       const payload = {
+        slug: '',
         name: (formData.get('name') || '').toString().trim() || null,
         short_name: (formData.get('short_name') || '').toString().trim() || null,
         description: (formData.get('description') || '').toString().trim() || null,
@@ -593,6 +606,8 @@
         showFormMessage('Please provide at least a strategy name.', 'error');
         return;
       }
+
+      payload.slug = createStrategySlug(payload.short_name || payload.name);
 
       showFormMessage('Saving strategy…', 'info');
 
