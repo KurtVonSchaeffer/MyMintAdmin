@@ -282,9 +282,7 @@
 
         <div id="tabOverviewPanel">
           <div class="grid grid-cols-1 xl:grid-cols-12 gap-4">
-            <!-- Left Column - Overview strategies & stats -->
             <div class="xl:col-span-8 space-y-4">
-              <!-- Strategies Card -->
               <div class="bg-white rounded-3xl p-6 shadow-sm">
                 <div class="flex items-start justify-between mb-4">
                   <div>
@@ -319,7 +317,6 @@
                 </div>
               </div>
 
-              <!-- Featured Strategies Card -->
               <div class="bg-white rounded-3xl p-6 shadow-sm">
                 <div class="flex items-center justify-between mb-4">
                   <h2 class="text-xl font-semibold text-slate-800">Featured strategies</h2>
@@ -330,9 +327,7 @@
               </div>
             </div>
 
-            <!-- Right Column - Top holdings & All strategies summary -->
             <div class="xl:col-span-4 space-y-4">
-              <!-- Top Performing Holdings -->
               <div class="bg-white rounded-3xl p-5 shadow-sm">
                 <div class="flex items-center justify-between mb-4">
                   <h2 class="text-xl font-semibold text-slate-800">Top performing holdings</h2>
@@ -342,7 +337,6 @@
                 <div class="space-y-3" id="topHoldingsList"></div>
               </div>
 
-              <!-- All Strategies (simple view) -->
               <div class="bg-white rounded-3xl p-5 shadow-sm">
                 <div class="flex items-center justify-between mb-4">
                   <h2 class="text-xl font-semibold text-slate-800">All strategies</h2>
@@ -363,7 +357,6 @@
 
         <div id="tabStrategiesPanel" class="hidden">
           <div class="grid grid-cols-1 xl:grid-cols-12 gap-5">
-            <!-- Left column: add form -->
             <section class="xl:col-span-5 space-y-4">
               <div class="bg-white rounded-3xl p-5 shadow-sm border border-slate-100">
                 <div class="flex items-start justify-between mb-4">
@@ -453,11 +446,9 @@
                         />
                       </div>
                       <div id="strategyAssetsSelected" class="flex flex-wrap gap-1 min-h-[1.5rem]">
-                        <!-- selected asset pills -->
-                      </div>
+                        </div>
                       <div class="max-h-40 overflow-y-auto rounded-xl bg-white border border-slate-200" id="strategyAssetsList">
-                        <!-- searchable asset list -->
-                      </div>
+                        </div>
                     </div>
                   </div>
 
@@ -472,7 +463,6 @@
               </div>
             </section>
 
-            <!-- Right column: list + filters + top 5 -->
             <section class="xl:col-span-7 space-y-4">
               <div class="bg-white rounded-3xl p-5 shadow-sm border border-slate-100">
                 <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
@@ -623,6 +613,18 @@
         default:
           return 'bg-slate-100 text-slate-600';
       }
+    };
+
+    const createStrategySlug = (value) => {
+      const base = String(value || '')
+        .toLowerCase()
+        .trim()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 48);
+      const fallback = base || 'strategy';
+      const unique = Date.now().toString(36).slice(-6);
+      return `${fallback}-${unique}`;
     };
 
     const renderStrategyItem = (strategy) => {
@@ -1217,7 +1219,7 @@
     const loadStrategies = async () => {
       const { data, error } = await supabaseClient
         .from('strategies')
-        .select('id, name, short_name, description, objective, risk_level, sector, min_investment, base_currency, is_featured, is_public, status, created_at, security_ids')
+        .select('id, slug, name, short_name, description, objective, risk_level, sector, min_investment, base_currency, is_featured, is_public, status, created_at, holdings')
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -1236,16 +1238,19 @@
 
       const strategies = data || [];
       const featured = strategies.filter(item => item.is_featured && item.is_public);
-      const publicOnly = strategies.filter(item => item.is_public);
 
-      allStrategiesData = publicOnly;
+      // The previous code was mistakenly assigning "publicOnly" data to sections labeled "All".
+      // We are now passing the complete `strategies` array to reflect all data points properly.
+      allStrategiesData = strategies;
       allStrategiesFullData = strategies;
 
       renderList(featuredStrategies, featured.slice(0, 3), 'No featured strategies yet.');
-      populateAllStrategiesFilter(publicOnly);
+      
+      populateAllStrategiesFilter(strategies);
       renderAllStrategiesByFilter();
-      buildStrategyChart(publicOnly);
-      updateStats(publicOnly);
+      buildStrategyChart(strategies);
+      updateStats(strategies);
+      
       applyStrategiesFiltersAndRender();
       renderTop5Strategies();
     };
@@ -1266,6 +1271,7 @@
 
       const formData = new FormData(strategyForm);
       const payload = {
+        slug: '',
         name: (formData.get('name') || '').toString().trim() || null,
         short_name: (formData.get('short_name') || '').toString().trim() || null,
         description: (formData.get('description') || '').toString().trim() || null,
@@ -1276,13 +1282,15 @@
         base_currency: (formData.get('base_currency') || '').toString().trim() || 'ZAR',
         is_public: strategyForm.querySelector('#strategyIsPublic')?.checked || false,
         is_featured: strategyForm.querySelector('#strategyIsFeatured')?.checked || false,
-        security_ids: Array.from(selectedSecurityIdsForStrategy)
+        holdings: Array.from(selectedSecurityIdsForStrategy).map((securityId) => ({ security_id: securityId }))
       };
 
       if (!payload.name) {
         showFormMessage('Please provide at least a strategy name.', 'error');
         return;
       }
+
+      payload.slug = createStrategySlug(payload.short_name || payload.name);
 
       showFormMessage('Saving strategy…', 'info');
 
