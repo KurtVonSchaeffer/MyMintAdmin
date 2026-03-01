@@ -719,13 +719,14 @@
       const totalWeight = holdings.reduce((sum, h) => sum + (Number(h.weight) || 0), 0);
 
       const holdingsPreview = holdings.slice(0, 4).map(h => {
-        const sym = h.ticker || h.symbol || h;
+        const rawSym = h.ticker || h.symbol || (typeof h === 'string' ? h : '');
+        const sym = typeof rawSym === 'string' ? rawSym : String(rawSym || '');
         const sec = securitiesMap ? (securitiesMap.get(sym) || securitiesMap.get(normalizeSymbol(sym))) : null;
         const logoUrl = sec?.logo_url || null;
         return `<div class="w-6 h-6 rounded-full border border-white bg-white shadow-sm flex items-center justify-center overflow-hidden">
           ${logoUrl
             ? `<img src="${logoUrl}" alt="${sym}" class="w-full h-full object-cover" />`
-            : `<div class="w-full h-full bg-slate-100 flex items-center justify-center text-[8px] font-bold text-slate-500">${(sym || '').slice(0, 2)}</div>`
+            : `<div class="w-full h-full bg-slate-100 flex items-center justify-center text-[8px] font-bold text-slate-500">${sym.slice(0, 2)}</div>`
           }
         </div>`;
       }).join('');
