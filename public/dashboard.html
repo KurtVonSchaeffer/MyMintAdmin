@@ -1150,7 +1150,7 @@
 
       const attempt1 = await supabaseClient
         .from('securities')
-        .select('id, symbol, ticker, name, logo_url, last_price')
+        .select('id, symbol, name, logo_url, last_price')
         .or(`symbol.ilike.%${query}%,name.ilike.%${query}%`)
         .limit(20);
       if (!attempt1.error && attempt1.data) {
@@ -1158,23 +1158,14 @@
       } else {
         const attempt2 = await supabaseClient
           .from('securities')
-          .select('id, symbol, ticker, name, logo_url, last_price')
-          .or(`ticker.ilike.%${query}%,name.ilike.%${query}%`)
+          .select('id, symbol, name')
+          .or(`symbol.ilike.%${query}%,name.ilike.%${query}%`)
           .limit(20);
         if (!attempt2.error && attempt2.data) {
           data = attempt2.data;
         } else {
-          const attempt3 = await supabaseClient
-            .from('securities')
-            .select('id, symbol, ticker, name')
-            .or(`ticker.ilike.%${query}%,name.ilike.%${query}%`)
-            .limit(20);
-          if (!attempt3.error && attempt3.data) {
-            data = attempt3.data;
-          } else {
-            error = attempt3.error;
-            console.error('Securities search error (all attempts failed):', attempt1.error, attempt2.error, attempt3.error);
-          }
+          error = attempt2.error;
+          console.error('Securities search error:', attempt1.error, attempt2.error);
         }
       }
 
@@ -1184,7 +1175,7 @@
         return;
       }
 
-      const enriched = data.map(s => ({ ...s, _sym: s.symbol || s.ticker || '' }));
+      const enriched = data.map(s => ({ ...s, _sym: s.symbol || '' }));
       const existingSymbols = new Set(formHoldings.map(h => h.symbol));
       const filtered = enriched.filter(s => !existingSymbols.has(s._sym));
       if (filtered.length === 0) {
