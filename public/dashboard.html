@@ -919,7 +919,7 @@
               `<b style="font-size:13px">${details.name}</b>`,
               `<span style="color:#94a3b8">Min. investment:</span> <b style="color:#a5f3fc">${formatCur(details.value, details.currency)}</b>`,
               details.sector ? `<span style="color:#94a3b8">Sector:</span> ${details.sector}` : '',
-              `<span style="color:#94a3b8">Risk:</span> <span style="color:${riskColor(details.risk)}">${details.risk}</span>`,
+              `<span style="color:#94a3b8">Risk:</span> <span style="color:${riskColor(details.risk)}">${details.risk === 'balanced' ? 'medium' : details.risk}</span>`,
               details.isFeatured ? '<span style="background:#fef3c7;color:#b45309;padding:1px 6px;border-radius:999px;font-size:11px">★ Featured</span>' : ''
             ].filter(Boolean).join('<br/>');
           }
