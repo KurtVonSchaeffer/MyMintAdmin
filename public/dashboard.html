@@ -1145,30 +1145,66 @@
 
     const searchSecurities = async (query) => {
       if (!query || query.length < 1) { securityDropdown.classList.add('hidden'); return; }
-      const { data, error } = await supabaseClient
+
+      let data = null, error = null;
+
+      const attempt1 = await supabaseClient
         .from('securities')
-        .select('symbol, name, logo_url, last_price')
+        .select('id, symbol, ticker, name, logo_url, last_price')
         .or(`symbol.ilike.%${query}%,name.ilike.%${query}%`)
         .limit(20);
+      if (!attempt1.error && attempt1.data) {
+        data = attempt1.data;
+      } else {
+        const attempt2 = await supabaseClient
+          .from('securities')
+          .select('id, symbol, ticker, name, logo_url, last_price')
+          .or(`ticker.ilike.%${query}%,name.ilike.%${query}%`)
+          .limit(20);
+        if (!attempt2.error && attempt2.data) {
+          data = attempt2.data;
+        } else {
+          const attempt3 = await supabaseClient
+            .from('securities')
+            .select('id, symbol, ticker, name')
+            .or(`ticker.ilike.%${query}%,name.ilike.%${query}%`)
+            .limit(20);
+          if (!attempt3.error && attempt3.data) {
+            data = attempt3.data;
+          } else {
+            error = attempt3.error;
+            console.error('Securities search error (all attempts failed):', attempt1.error, attempt2.error, attempt3.error);
+          }
+        }
+      }
 
-      if (error || !data || data.length === 0) { securityDropdown.classList.add('hidden'); return; }
+      if (error || !data || data.length === 0) {
+        securityDropdown.innerHTML = `<div class="px-3 py-3 text-sm text-slate-400 text-center">${error ? 'Error loading securities' : 'No matching securities found'}</div>`;
+        securityDropdown.classList.remove('hidden');
+        return;
+      }
 
+      const enriched = data.map(s => ({ ...s, _sym: s.symbol || s.ticker || '' }));
       const existingSymbols = new Set(formHoldings.map(h => h.symbol));
-      const filtered = data.filter(s => !existingSymbols.has(s.symbol));
-      if (filtered.length === 0) { securityDropdown.classList.add('hidden'); return; }
+      const filtered = enriched.filter(s => !existingSymbols.has(s._sym));
+      if (filtered.length === 0) {
+        securityDropdown.innerHTML = `<div class="px-3 py-3 text-sm text-slate-400 text-center">All matching securities already added</div>`;
+        securityDropdown.classList.remove('hidden');
+        return;
+      }
 
       securityDropdown.innerHTML = filtered.map(s => `
-        <button type="button" data-symbol="${s.symbol}" data-name="${s.name || s.symbol}" data-price="${s.last_price || 0}" data-logo="${s.logo_url || ''}"
+        <button type="button" data-symbol="${s._sym}" data-name="${s.name || s._sym}" data-price="${s.last_price || 0}" data-logo="${s.logo_url || ''}"
           class="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-slate-50 transition-colors first:rounded-t-xl last:rounded-b-xl">
           <div class="w-7 h-7 rounded-lg border border-slate-200 bg-white flex items-center justify-center overflow-hidden flex-shrink-0">
             ${s.logo_url
-              ? `<img src="${s.logo_url}" alt="${s.symbol}" class="w-full h-full object-cover" />`
-              : `<span class="text-[10px] font-semibold text-slate-400">${(s.symbol || '').slice(0, 2)}</span>`
+              ? `<img src="${s.logo_url}" alt="${s._sym}" class="w-full h-full object-cover" />`
+              : `<span class="text-[10px] font-semibold text-slate-400">${(s._sym || '').slice(0, 2)}</span>`
             }
           </div>
           <div class="flex-1 min-w-0">
-            <p class="text-sm font-medium text-slate-900 truncate">${s.name || s.symbol}</p>
-            <p class="text-xs text-slate-400">${s.symbol}</p>
+            <p class="text-sm font-medium text-slate-900 truncate">${s.name || s._sym}</p>
+            <p class="text-xs text-slate-400">${s._sym}</p>
           </div>
           <div class="text-right flex-shrink-0">
             <p class="text-xs font-medium text-slate-700">${s.last_price ? 'R ' + (Number(s.last_price) / 100).toFixed(2) : 'N/A'}</p>
