@@ -1405,39 +1405,28 @@
         </div>` : ''}
       `;
 
-      const menuBtn = wrapper.querySelector('.strategy-menu-btn');
       const menuDropdown = wrapper.querySelector('.strategy-menu-dropdown');
-      if (menuBtn && menuDropdown) {
-        menuBtn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          document.querySelectorAll('.strategy-menu-dropdown').forEach(d => { if (d !== menuDropdown) d.classList.add('hidden'); });
-          menuDropdown.classList.toggle('hidden');
-        });
-      }
-      const archiveBtn = wrapper.querySelector('.archive-strategy-btn');
-      if (archiveBtn) {
-        archiveBtn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          menuDropdown.classList.add('hidden');
-          archiveStrategy(archiveBtn.dataset.id);
-        });
-      }
-      const deleteBtn = wrapper.querySelector('.delete-strategy-btn');
-      if (deleteBtn) {
-        deleteBtn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          menuDropdown.classList.add('hidden');
-          deleteStrategy(deleteBtn.dataset.id, deleteBtn.dataset.name);
-        });
-      }
 
       wrapper.addEventListener('click', (e) => {
+        if (e.target.closest('.strategy-menu-btn')) {
+          document.querySelectorAll('.strategy-menu-dropdown').forEach(d => { if (d !== menuDropdown) d.classList.add('hidden'); });
+          if (menuDropdown) menuDropdown.classList.toggle('hidden');
+          return;
+        }
+        if (e.target.closest('.archive-strategy-btn')) {
+          if (menuDropdown) menuDropdown.classList.add('hidden');
+          archiveStrategy(strategy.id);
+          return;
+        }
+        if (e.target.closest('.delete-strategy-btn')) {
+          if (menuDropdown) menuDropdown.classList.add('hidden');
+          deleteStrategy(strategy.id, name);
+          return;
+        }
         if (e.target.closest('.factsheet-link')) {
-          e.stopPropagation();
           openFactsheetInline(strategy.id);
           return;
         }
-        if (e.target.closest('.strategy-menu-wrap')) return;
         openStrategyModal(strategy, securitiesMap);
       });
       return wrapper;
