@@ -575,6 +575,7 @@
         case 'low':
           return 'bg-emerald-100 text-emerald-700';
         case 'medium':
+        case 'balanced':
           return 'bg-amber-100 text-amber-700';
         case 'high':
           return 'bg-rose-100 text-rose-700';
@@ -881,6 +882,7 @@
       const riskColor = (risk) => ({
         low: '#10b981',
         medium: '#f59e0b',
+        balanced: '#f59e0b',
         high: '#f43f5e'
       }[risk] || '#94a3b8');
 
@@ -943,7 +945,7 @@
             fontSize: 11,
             formatter: (value) => (value >= 1000000
               ? `${value / 1000000}M`
-              : value >= 1000
+              : value >= 5000
                 ? `${value / 1000}k`
                 : value.toString())
           }
