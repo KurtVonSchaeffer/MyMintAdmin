@@ -4877,10 +4877,10 @@
     };
 
     const getMandateDataSource = (profileId, onboardingRow = {}) => {
-      const fromOnboarding = parseJsonSafe(onboardingRow?.sumsub_raw);
-      if (fromOnboarding) return fromOnboarding;
       const fromPackRow = parseJsonSafe(packDetailsRowMap[profileId]?.pack_details);
       if (fromPackRow) return fromPackRow;
+      const fromOnboarding = parseJsonSafe(onboardingRow?.sumsub_raw);
+      if (fromOnboarding) return fromOnboarding;
       return parseJsonSafe(packJsonMap[profileId]) || {};
     };
 
@@ -4895,11 +4895,16 @@
       const lastName = sourceLastName || profileLastName || fullNameFromSource.split(/\s+/).filter(Boolean).slice(-1).join(' ');
 
       const identityNumber = String(pickPackValue(source, [
+        'fixedInfo.idDocs.0.number',
+        'fixedInfo.idDocs.0.idNumber',
+        'info.idNumber',
         'idDocs.0.number',
         'idDocs.0.idNumber',
+        'document.idNumber',
         'fixedInfo.idNumber',
         'fixedInfo.nationality.idNumber',
         'idNumber',
+        'identityNumber',
         'passportNumber',
         'document.number'
       ]) || '').trim();
@@ -4918,11 +4923,23 @@
 
       const residentialAddress = String(
         pickPackValue(source, [
-          'address.formattedAddress',
-          'addresses.residential.formatted',
-          'addresses.0.formattedAddress',
           'fixedInfo.address',
-          'info.address'
+          'fixedInfo.fullAddress',
+          'fixedInfo.residentialAddress',
+          'info.address',
+          'info.residentialAddress',
+          'address.formattedAddress',
+          'address.fullAddress',
+          'address.street',
+          'address.line1',
+          'addresses.residential.formatted',
+          'addresses.residential.fullAddress',
+          'addresses.residential.addressLine',
+          'addresses.residential.street',
+          'addresses.0.fullAddress',
+          'addresses.0.formattedAddress',
+          'addresses.0.addressLine',
+          'addresses.0.street'
         ])
         || profile?.address
         || ''
@@ -4930,7 +4947,17 @@
 
       const postalAddress = String(
         pickPackValue(source, [
+          'fixedInfo.postalAddress',
+          'fixedInfo.address',
+          'info.postalAddress',
+          'info.address',
           'addresses.postal.formatted',
+          'addresses.postal.fullAddress',
+          'addresses.postal.addressLine',
+          'addresses.postal.street',
+          'addresses.0.formattedAddress',
+          'addresses.0.fullAddress',
+          'addresses.0.addressLine',
           'postalAddress',
           'mailingAddress',
           'address.formattedAddress'
@@ -4939,7 +4966,18 @@
         || ''
       ).trim();
 
-      const postalCode = String(pickPackValue(source, ['address.postCode', 'address.postalCode', 'addresses.postal.postCode']) || '').trim();
+      const postalCode = String(pickPackValue(source, [
+        'fixedInfo.postCode',
+        'fixedInfo.postalCode',
+        'info.postCode',
+        'info.postalCode',
+        'address.postCode',
+        'address.postalCode',
+        'addresses.postal.postCode',
+        'addresses.postal.postalCode',
+        'addresses.0.postCode',
+        'addresses.0.postalCode'
+      ]) || '').trim();
       const jsonCorpus = JSON.stringify({ source, onboardingRow }).toLowerCase();
       const initials = ((firstName[0] || '') + (lastName[0] || '')).toUpperCase() || 'NA';
 
