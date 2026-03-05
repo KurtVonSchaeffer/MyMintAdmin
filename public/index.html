@@ -2944,12 +2944,13 @@
           <table class="completed-table">
             <thead>
               <tr>
+                <th>Name</th>
                 <th>Email</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody id="notCompletedEmailTableBody">
-              <tr><td class="completed-table-empty" colspan="2">Switch to Not completed filter and open Email view.</td></tr>
+              <tr><td class="completed-table-empty" colspan="3">Switch to Not completed filter and open Email view.</td></tr>
             </tbody>
           </table>
         </div>
@@ -3053,9 +3054,19 @@
                   <div class="detail-label">Phone number</div>
                   <div class="detail-value" data-phone>Not added</div>
                 </div>
+              </div>
 
-                <div class="detail-row" data-mandate-actions style="display: none;">
-                  <div class="detail-label">Mandate</div>
+              <div class="detail-card" data-mandate-actions style="display: none;">
+                <div class="card-header">
+                  <div class="card-title">
+                    <svg viewBox="0 0 24 24">
+                      <path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm1 7V3.5L18.5 9H15z"/>
+                    </svg>
+                    Mandate
+                  </div>
+                </div>
+                <div class="detail-row">
+                  <div class="detail-label">Actions</div>
                   <div class="detail-value">
                     <div class="mandate-actions">
                       <button class="mandate-action-btn" type="button" data-mandate-view>View</button>
@@ -3739,20 +3750,22 @@
 
     const buildNotCompletedEmailEntry = (profile = {}) => {
       const profileId = String(profile?.id || '').trim();
+      const fullName = [profile?.first_name, profile?.last_name].filter(Boolean).join(' ').trim() || 'Unknown User';
       const email = String(profile?.email || '').trim() || '-';
-      return { profileId, email };
+      return { profileId, fullName, email };
     };
 
     const renderNotCompletedEmailTable = (entries = []) => {
       if (!notCompletedEmailTableBody) return;
 
       if (!entries.length) {
-        notCompletedEmailTableBody.innerHTML = '<tr><td class="completed-table-empty" colspan="2">No not-completed users found for current filters.</td></tr>';
+        notCompletedEmailTableBody.innerHTML = '<tr><td class="completed-table-empty" colspan="3">No not-completed users found for current filters.</td></tr>';
         return;
       }
 
       notCompletedEmailTableBody.innerHTML = entries.map((entry) => `
         <tr>
+          <td>${escapeHtml(entry.fullName)}</td>
           <td>${escapeHtml(entry.email)}</td>
           <td><button type="button" class="completed-table-download-row" data-download-not-completed-email-csv="${escapeHtml(entry.profileId)}">Download CSV</button></td>
         </tr>
@@ -3760,9 +3773,9 @@
     };
 
     const notCompletedEmailEntriesToCsv = (entries = []) => {
-      const lines = [[csvEscape('Email')].join(',')];
+      const lines = [[csvEscape('Name'), csvEscape('Email')].join(',')];
       entries.forEach((entry) => {
-        lines.push([csvEscape(entry.email)].join(','));
+        lines.push([csvEscape(entry.fullName), csvEscape(entry.email)].join(','));
       });
       return lines.join('\n');
     };
