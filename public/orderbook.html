@@ -1743,13 +1743,24 @@
     };
 
     const maybeCaptureFilledOrderbook = async () => {
-      const now = new Date();
-      const dateKey = getArchiveDateKey(now);
-
-      if (!isPastFilledCutoff(now)) return;
-      if (hasFilledOrderbookForDate(dateKey)) return;
       if (!allOrderbookRows.length) return;
       if (isCapturingFilledOrderbook) return;
+
+      const now = new Date();
+      const todayKey = getArchiveDateKey(now);
+
+      // One capture per day
+      if (hasFilledOrderbookForDate(todayKey)) return;
+
+      // Only capture once a new day has started and there are rows from
+      // before today. This lets records pile up visibly on the active
+      // orderbook throughout the day before being archived.
+      const hasOlderRows = allOrderbookRows.some((row) => {
+        if (!row.timestamp) return true;
+        return getArchiveDateKey(new Date(row.timestamp)) < todayKey;
+      });
+
+      if (!hasOlderRows) return;
 
       isCapturingFilledOrderbook = true;
       try {
