@@ -2957,7 +2957,7 @@
       </div>
       <div class="completed-table-panel" id="notCompletedEmailPanel" aria-hidden="true">
         <div class="completed-table-toolbar">
-          <div class="completed-table-title">Not completed user emails</div>
+          <div class="completed-table-title" id="notCompletedEmailPanelTitle">Not completed user emails</div>
           <button class="completed-table-download-all" type="button" data-download-all-not-completed-email-csv>Download all</button>
         </div>
         <div class="completed-table-wrap">
@@ -2970,7 +2970,7 @@
               </tr>
             </thead>
             <tbody id="notCompletedEmailTableBody">
-              <tr><td class="completed-table-empty" colspan="3">Switch to Not completed filter and open Email view.</td></tr>
+              <tr><td class="completed-table-empty" colspan="3">Switch to All or Not completed filter and open Email view.</td></tr>
             </tbody>
           </table>
         </div>
@@ -3440,6 +3440,7 @@
     const completedTablePanel = document.getElementById('completedTablePanel');
     const completedTableBody = document.getElementById('completedTableBody');
     const notCompletedEmailPanel = document.getElementById('notCompletedEmailPanel');
+    const notCompletedEmailPanelTitle = document.getElementById('notCompletedEmailPanelTitle');
     const notCompletedEmailTableBody = document.getElementById('notCompletedEmailTableBody');
     const searchInput = document.querySelector('.top-search input');
     const activeProfileFilters = {
@@ -3779,7 +3780,8 @@
       if (!notCompletedEmailTableBody) return;
 
       if (!entries.length) {
-        notCompletedEmailTableBody.innerHTML = '<tr><td class="completed-table-empty" colspan="3">No not-completed users found for current filters.</td></tr>';
+        const contextLabel = activeProfileFilters.kyc === 'all' ? 'all users' : 'not-completed users';
+        notCompletedEmailTableBody.innerHTML = `<tr><td class="completed-table-empty" colspan="3">No ${escapeHtml(contextLabel)} found for current filters.</td></tr>`;
         return;
       }
 
@@ -3800,11 +3802,15 @@
       return lines.join('\n');
     };
 
+    const isEmailViewFilterActive = () => (
+      activeProfileFilters.kyc === 'not-completed' || activeProfileFilters.kyc === 'all'
+    );
+
     const syncCompletedViewVisibility = () => {
       const completedFilterActive = activeProfileFilters.kyc === 'completed';
-      const notCompletedFilterActive = activeProfileFilters.kyc === 'not-completed';
+      const emailViewFilterActive = isEmailViewFilterActive();
       const showTableOnly = (completedFilterActive && completedTableOpen)
-        || (notCompletedFilterActive && notCompletedEmailOpen);
+        || (emailViewFilterActive && notCompletedEmailOpen);
       if (profilesList) {
         profilesList.style.display = showTableOnly ? 'none' : '';
       }
@@ -4985,16 +4991,21 @@
       });
 
       const completedFilterActive = activeProfileFilters.kyc === 'completed';
-      const notCompletedFilterActive = activeProfileFilters.kyc === 'not-completed';
+      const emailViewFilterActive = isEmailViewFilterActive();
       if (completedTableViewBtn) {
         completedTableViewBtn.classList.toggle('visible', completedFilterActive);
         completedTableViewBtn.setAttribute('aria-expanded', completedFilterActive && completedTableOpen ? 'true' : 'false');
         completedTableViewBtn.textContent = completedTableOpen && completedFilterActive ? 'Table view ▴' : 'Table view ▾';
       }
       if (notCompletedEmailViewBtn) {
-        notCompletedEmailViewBtn.classList.toggle('visible', notCompletedFilterActive);
-        notCompletedEmailViewBtn.setAttribute('aria-expanded', notCompletedFilterActive && notCompletedEmailOpen ? 'true' : 'false');
-        notCompletedEmailViewBtn.textContent = notCompletedEmailOpen && notCompletedFilterActive ? 'Email view ▴' : 'Email view ▾';
+        notCompletedEmailViewBtn.classList.toggle('visible', emailViewFilterActive);
+        notCompletedEmailViewBtn.setAttribute('aria-expanded', emailViewFilterActive && notCompletedEmailOpen ? 'true' : 'false');
+        notCompletedEmailViewBtn.textContent = notCompletedEmailOpen && emailViewFilterActive ? 'Email view ▴' : 'Email view ▾';
+      }
+      if (notCompletedEmailPanelTitle) {
+        notCompletedEmailPanelTitle.textContent = activeProfileFilters.kyc === 'all'
+          ? 'All user emails'
+          : 'Not completed user emails';
       }
 
       if (!completedFilterActive) {
@@ -5015,7 +5026,7 @@
         }
       }
 
-      if (!notCompletedFilterActive) {
+      if (!emailViewFilterActive) {
         notCompletedEmailOpen = false;
         notCompletedEmailEntries = [];
         if (notCompletedEmailPanel) {
@@ -6302,7 +6313,7 @@
 
       const emailToggleBtn = event.target.closest('#notCompletedEmailViewBtn');
       if (emailToggleBtn) {
-        if (activeProfileFilters.kyc !== 'not-completed') return;
+        if (!isEmailViewFilterActive()) return;
         notCompletedEmailOpen = !notCompletedEmailOpen;
         if (notCompletedEmailPanel) {
           notCompletedEmailPanel.classList.toggle('active', notCompletedEmailOpen);
@@ -6355,7 +6366,8 @@
         if (!notCompletedEmailEntries.length) return;
         const csv = notCompletedEmailEntriesToCsv(notCompletedEmailEntries);
         const dateTag = new Date().toISOString().slice(0, 10);
-        downloadCsvContent(`not-completed-user-emails-${dateTag}.csv`, csv);
+        const filePrefix = activeProfileFilters.kyc === 'all' ? 'all-user-emails' : 'not-completed-user-emails';
+        downloadCsvContent(`${filePrefix}-${dateTag}.csv`, csv);
         return;
       }
 
