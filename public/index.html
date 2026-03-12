@@ -3507,6 +3507,7 @@
 
       images.forEach((img, index) => {
         const imageId = img?.id || img?.previewId || img?.imageId || img?.resourceId;
+        const archivedUrl = img?.archivedUrl || img?.signed_url || '';
         if (!imageId) return;
         const button = document.createElement('button');
         const fileName = img?.fileMetadata?.fileName || `Document ${index + 1}`;
@@ -3529,9 +3530,19 @@
         if (downloadButton) {
           downloadButton.addEventListener('click', async (downloadEvent) => {
             downloadEvent.stopPropagation();
-            if (!activeInspectionId || !imageId) return;
             try {
-              const blob = await fetchApplicantImage(activeInspectionId, imageId);
+              let blob = null;
+              if (archivedUrl) {
+                const archivedResponse = await fetch(archivedUrl);
+                if (!archivedResponse.ok) {
+                  throw new Error(`Archived image fetch failed: ${archivedResponse.status}`);
+                }
+                blob = await archivedResponse.blob();
+              } else {
+                if (!activeInspectionId || !imageId) return;
+                blob = await fetchApplicantImage(activeInspectionId, imageId);
+              }
+
               const url = URL.createObjectURL(blob);
               const link = document.createElement('a');
               link.href = url;
@@ -3547,6 +3558,11 @@
         }
 
         button.addEventListener('click', () => {
+          if (archivedUrl) {
+            window.open(archivedUrl, '_blank', 'noopener');
+            return;
+          }
+
           if (!activeInspectionId || !imageId) return;
           fetchApplicantImage(activeInspectionId, imageId)
             .then((imageBlob) => {
@@ -3570,6 +3586,64 @@
       activeImages = [];
       if (imageModal) imageModal.classList.remove('active');
       if (imageList) imageList.innerHTML = '';
+    };
+
+    const archiveCompletedUserDocuments = async (profileId, externalUserId) => {
+      const normalizedProfileId = String(profileId || '').trim();
+      const normalizedExternalUserId = String(externalUserId || '').trim();
+      if (!normalizedProfileId || !normalizedExternalUserId) {
+        return { ok: false, skipped: true, reason: 'missing-profile-or-external-id' };
+      }
+
+      const { data } = await supabaseClient.auth.getSession();
+      const token = data?.session?.access_token;
+      if (!token) {
+        throw new Error('No active session token for archive request');
+      }
+
+      const response = await fetch('/api/sumsub/archive', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          profileId: normalizedProfileId,
+          externalUserId: normalizedExternalUserId
+        })
+      });
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload?.details || payload?.error || `Archive request failed: ${response.status}`);
+      }
+
+      return response.json();
+    };
+
+    const fetchArchivedSumsubDocuments = async (profileId) => {
+      const normalizedProfileId = String(profileId || '').trim();
+      if (!normalizedProfileId) return [];
+
+      const { data } = await supabaseClient.auth.getSession();
+      const token = data?.session?.access_token;
+      if (!token) {
+        throw new Error('No active session token for archive fetch');
+      }
+
+      const response = await fetch(`/api/sumsub/archive?profileId=${encodeURIComponent(normalizedProfileId)}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload?.details || payload?.error || `Archive fetch failed: ${response.status}`);
+      }
+
+      const payload = await response.json().catch(() => ({}));
+      const items = Array.isArray(payload?.items) ? payload.items : [];
+      return items;
     };
 
     const formatFieldValue = (value) => {
@@ -4425,9 +4499,6 @@
           const effectiveKycState = getEffectiveKycState(profileId, allKycMap[profileId]?.status || 'Not initiated');
           if (!effectiveKycState.completed) return false;
 
-          const alreadyHasPack = Boolean(packJsonMap[profileId] || packDetailsRowMap[profileId]?.pack_details);
-          if (alreadyHasPack) return false;
-
           const externalUserId = String(allKycMap[profileId]?.externalUserId || onboardingMap[profileId]?.user_id || '').trim();
           return Boolean(externalUserId);
         });
@@ -4439,9 +4510,14 @@
           if (!externalUserId) continue;
 
           try {
-            const applicantJson = await fetchApplicantByExternalId(externalUserId);
-            const didSave = await persistPackForProfileId(profileId, applicantJson, trigger);
-            if (didSave) synced += 1;
+            const alreadyHasPack = Boolean(packJsonMap[profileId] || packDetailsRowMap[profileId]?.pack_details);
+            if (!alreadyHasPack) {
+              const applicantJson = await fetchApplicantByExternalId(externalUserId);
+              const didSave = await persistPackForProfileId(profileId, applicantJson, trigger);
+              if (didSave) synced += 1;
+            }
+
+            await archiveCompletedUserDocuments(profileId, externalUserId);
           } catch (error) {
             console.error(`Sumsub auto-sync failed for ${profileId}:`, error?.message || error);
           }
@@ -6547,6 +6623,27 @@
               openImageModal(inspectionId, items);
             } catch (error) {
               console.error('Sumsub image error:', error);
+              const profileId = item?.dataset?.profileId;
+              if (!profileId) return;
+              try {
+                const archived = await fetchArchivedSumsubDocuments(profileId);
+                if (!archived.length) return;
+
+                const offlineItems = archived.map((row, index) => ({
+                  id: row.image_id || `archived-${index + 1}`,
+                  fileMetadata: {
+                    fileName: row.file_name || `Archived-${index + 1}`,
+                    fileType: row.file_type || row.mime_type || 'Archived document'
+                  },
+                  addedDate: row.archived_at,
+                  archivedUrl: row.signed_url,
+                  source: 'archive'
+                }));
+
+                openImageModal(null, offlineItems);
+              } catch (archiveError) {
+                console.error('Archive fallback load failed:', archiveError);
+              }
             }
           })();
         }

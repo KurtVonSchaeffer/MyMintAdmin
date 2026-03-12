@@ -4,6 +4,7 @@ const https = require('https');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const sumsubArchiveHandler = require('./api/sumsub/archive');
 
 const port = process.env.PORT || 3000;
 const publicDir = path.join(__dirname, 'public');
@@ -585,6 +586,27 @@ const server = http.createServer((req, res) => {
     });
 
     sumsubReq.end();
+    return;
+  }
+
+  if (req.url.startsWith('/api/sumsub/archive')) {
+    (async () => {
+      try {
+        const url = new URL(req.url, `http://${req.headers.host}`);
+        req.query = Object.fromEntries(url.searchParams.entries());
+
+        if (req.method === 'POST') {
+          req.body = await readJsonBody(req);
+        }
+
+        await sumsubArchiveHandler(req, res);
+      } catch (error) {
+        sendJson(res, 500, {
+          error: 'Could not handle sumsub archive request',
+          details: error?.message || 'Unknown error'
+        });
+      }
+    })();
     return;
   }
 
