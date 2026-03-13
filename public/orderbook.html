@@ -533,6 +533,21 @@
       background: #fafafa;
     }
 
+    .strategy-badge {
+      display: inline-block;
+      font-size: 0.68rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      color: #6d28d9;
+      background: #f5f3ff;
+      border: 1px solid #ddd6fe;
+      border-radius: 4px;
+      padding: 1px 6px;
+      margin-left: 6px;
+      vertical-align: middle;
+    }
+
     .orderbook-empty {
       border: 1px dashed #d1d5db;
       border-radius: 14px;
@@ -1289,6 +1304,172 @@
       `;
     };
 
+    const groupByStrategy = (aggregatedRows, rawRows) => {
+      const nonStrategyRows = [];
+      const strategyBuckets = new Map();
+
+      (aggregatedRows || []).forEach((row) => {
+        const sid = row.strategyId || null;
+        if (!sid) {
+          nonStrategyRows.push(row);
+          return;
+        }
+        if (!strategyBuckets.has(sid)) strategyBuckets.set(sid, []);
+        strategyBuckets.get(sid).push(row);
+      });
+
+      const strategyParentRows = Array.from(strategyBuckets.entries()).map(([strategyId, holdings]) => {
+        const first = holdings[0];
+        const totalMV = holdings.reduce((s, h) => s + (h.marketValueNumber || 0), 0);
+        const totalQty = holdings.reduce((s, h) => s + (h.quantityValue || 0), 0);
+        const totalPnl = holdings.reduce((s, h) => s + (h.unrealizedPnlNumber || 0), 0);
+        let wSum = 0, wTot = 0;
+        holdings.forEach((h) => {
+          if (h.avgFillNumber != null && Number.isFinite(h.avgFillNumber)) {
+            const w = Math.abs(h.quantityValue) || 1;
+            wSum += h.avgFillNumber * w;
+            wTot += w;
+          }
+        });
+        const latestTs = holdings.reduce((l, h) => {
+          const t = new Date(h.timestamp || 0).getTime();
+          return t > l ? t : l;
+        }, 0);
+
+        const userMap = new Map();
+        (rawRows || []).filter((r) => r.strategyId === strategyId).forEach((r) => {
+          if (!r.userId) return;
+          if (!userMap.has(r.userId)) {
+            userMap.set(r.userId, {
+              userId: r.userId, clientName: r.clientName,
+              clientAccountId: r.clientAccountId, clientIdRegNo: r.clientIdRegNo,
+              totalMarketValue: 0, holdingsCount: 0
+            });
+          }
+          const u = userMap.get(r.userId);
+          u.totalMarketValue += r.marketValueNumber || 0;
+          u.holdingsCount += 1;
+        });
+
+        return {
+          isStrategy: true,
+          strategyId,
+          strategyName: first.strategyName || 'Unknown Strategy',
+          strategyShortName: first.strategyShortName || '',
+          strategySlug: first.strategySlug || '',
+          strategyHoldings: holdings.map((h, i) => ({ ...h, line: i + 1 })),
+          strategyUsers: Array.from(userMap.values()),
+          securityId: '',
+          instrumentName: first.strategyName || 'Unknown Strategy',
+          ticker: first.strategyShortName || first.strategySlug || '-',
+          isin: '-',
+          side: totalQty < 0 ? 'SELL' : 'BUY',
+          quantityValue: totalQty,
+          totalQuantity: totalQty.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 }),
+          avgFillNumber: wTot > 0 ? (wSum / wTot) : null,
+          avgFill: wTot > 0
+            ? `R ${(wSum / wTot).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+            : '-',
+          marketValueNumber: totalMV,
+          marketValue: `R ${totalMV.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+          unrealizedPnlNumber: totalPnl,
+          unrealizedPnl: totalPnl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+          orderType: 'Market',
+          settlementAccount: first.settlementAccount || '',
+          settlementAccountOptions: first.settlementAccountOptions || [],
+          brokerRef: first.brokerRef || '',
+          brokerRefOptions: first.brokerRefOptions || [],
+          timestamp: latestTs ? new Date(latestTs).toISOString() : null,
+          sourceIds: holdings.flatMap((h) => h.sourceIds || []),
+          sourceId: first.sourceId || '',
+          bndRows: []
+        };
+      });
+
+      return [...nonStrategyRows, ...strategyParentRows]
+        .sort((a, b) => new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime())
+        .map((row, i) => ({ ...row, line: i + 1 }));
+    };
+
+    const renderStrategyDetailsTable = (row) => {
+      const holdings = row.strategyHoldings || [];
+      const users = row.strategyUsers || [];
+
+      let holdingsHtml;
+      if (holdings.length) {
+        const hBody = holdings.map((h) => `
+          <tr>
+            <td>${escapeHtml(String(h.line))}</td>
+            <td>${escapeHtml(h.instrumentName || '-')}</td>
+            <td class="orderbook-cell-muted">${escapeHtml(h.ticker || '-')}</td>
+            <td>${escapeHtml(h.side || '-')}</td>
+            <td>${escapeHtml(String(h.totalQuantity ?? '-'))}</td>
+            <td>${escapeHtml(asRandValue(h.avgFill))}</td>
+            <td>${escapeHtml(asRandValue(h.marketValue))}</td>
+            <td>${escapeHtml(String(h.unrealizedPnl ?? '-'))}</td>
+          </tr>
+        `).join('');
+
+        holdingsHtml = `
+          <div class="orderbook-detail-title">Holdings under ${escapeHtml(row.strategyName || 'Strategy')}</div>
+          <div class="orderbook-detail-table-wrap">
+            <table class="orderbook-detail-table">
+              <thead>
+                <tr>
+                  <th>Line</th>
+                  <th>Instrument Name</th>
+                  <th>Ticker</th>
+                  <th>Side</th>
+                  <th>Total QYT</th>
+                  <th>Avg Fill</th>
+                  <th>Market Value</th>
+                  <th>Unrealized PnL</th>
+                </tr>
+              </thead>
+              <tbody>${hBody}</tbody>
+            </table>
+          </div>
+        `;
+      } else {
+        holdingsHtml = '<div class="filled-orderbook-empty">No holdings found for this strategy.</div>';
+      }
+
+      let usersHtml = '';
+      if (users.length) {
+        const uBody = users.map((u, i) => `
+          <tr>
+            <td>${escapeHtml(String(i + 1))}</td>
+            <td>${escapeHtml(u.clientName || '-')}</td>
+            <td>${escapeHtml(u.clientAccountId || '-')}</td>
+            <td>${escapeHtml(maskIdentifier(u.clientIdRegNo || '-'))}</td>
+            <td>${escapeHtml(formatMoney(u.totalMarketValue))}</td>
+            <td>${escapeHtml(String(u.holdingsCount))}</td>
+          </tr>
+        `).join('');
+
+        usersHtml = `
+          <div class="orderbook-detail-title" style="margin-top: 16px;">Investors in ${escapeHtml(row.strategyName || 'Strategy')}</div>
+          <div class="orderbook-detail-table-wrap">
+            <table class="orderbook-detail-table">
+              <thead>
+                <tr>
+                  <th>Line</th>
+                  <th>Client Name</th>
+                  <th>Account ID</th>
+                  <th>ID / Reg No</th>
+                  <th>Market Value</th>
+                  <th>Holdings</th>
+                </tr>
+              </thead>
+              <tbody>${uBody}</tbody>
+            </table>
+          </div>
+        `;
+      }
+
+      return holdingsHtml + usersHtml;
+    };
+
     const aggregateOrderbookRows = (rows) => {
       const groups = new Map();
 
@@ -1296,7 +1477,8 @@
         const key = [
           String(row.securityId || row.instrumentName || ''),
           String(row.side || '').toUpperCase(),
-          String(row.orderType || '').toUpperCase()
+          String(row.orderType || '').toUpperCase(),
+          String(row.strategyId || '')
         ].join('|');
 
         if (!groups.has(key)) {
@@ -1395,9 +1577,18 @@
       const header = ['Line', 'Instrument Name', 'Ticker', 'Side', 'Total QYT', 'Avg Fill', 'Market Value', 'Order Type', 'Settlement Account', 'Broker Ref', 'Unrealized PnL'];
       const csvLines = [header.map(normalizeCsv).join(',')];
 
-      rows.forEach((row) => {
+      const flatRows = [];
+      (rows || []).forEach((row) => {
+        if (row.isStrategy && Array.isArray(row.strategyHoldings) && row.strategyHoldings.length) {
+          row.strategyHoldings.forEach((h) => flatRows.push(h));
+        } else {
+          flatRows.push(row);
+        }
+      });
+
+      flatRows.forEach((row, index) => {
         csvLines.push([
-          row.line,
+          index + 1,
           row.instrumentName,
           row.ticker,
           row.side,
@@ -2539,8 +2730,7 @@
             <tr class="orderbook-detail-row is-hidden" data-archive-detail-row data-archive-line-key="${escapeHtml(rowKey)}">
               <td colspan="11">
                 <div class="orderbook-detail-wrap">
-                  <div class="orderbook-detail-title">BND Allocation Details</div>
-                  ${renderSnapshotBndDetailsTable(rows, row, book.sequence)}
+                  ${row.isStrategy ? renderStrategyDetailsTable(row) : `<div class="orderbook-detail-title">BND Allocation Details</div>${renderSnapshotBndDetailsTable(rows, row, book.sequence)}`}
                 </div>
               </td>
             </tr>
@@ -2742,7 +2932,7 @@
         return `
           <tr class="orderbook-main-row" data-orderbook-main-row data-line-key="${lineKey}">
             <td>${escapeHtml(String(row.line ?? '-'))}</td>
-            <td>${escapeHtml(row.instrumentName || '-')}</td>
+            <td>${escapeHtml(row.instrumentName || '-')}${row.isStrategy ? ' <span class="strategy-badge">Strategy</span>' : ''}</td>
             <td class="orderbook-cell-muted">${escapeHtml(row.ticker || '-')}</td>
             <td>${escapeHtml(row.side || '-')}</td>
             <td>${escapeHtml(String(row.totalQuantity ?? '-'))}</td>
@@ -2764,8 +2954,7 @@
           <tr class="orderbook-detail-row is-hidden" data-orderbook-detail-row data-line-key="${lineKey}">
             <td colspan="11">
               <div class="orderbook-detail-wrap">
-                <div class="orderbook-detail-title">BND Allocation Details</div>
-                ${renderBndDetailsTable(row)}
+                ${row.isStrategy ? renderStrategyDetailsTable(row) : `<div class="orderbook-detail-title">BND Allocation Details</div>${renderBndDetailsTable(row)}`}
               </div>
             </td>
           </tr>
@@ -2796,7 +2985,7 @@
     const loadOrderbookClientSideFallback = async () => {
       const { data: holdingsRows, error: holdingsError } = await supabaseClient
         .from('stock_holdings')
-        .select('id, user_id, security_id, quantity, avg_fill, market_value, unrealized_pnl, as_of_date, created_at, updated_at, status:"Status", fill_date:"Fill_date", exit_date:"Exit_date", avg_exit')
+        .select('id, user_id, security_id, quantity, avg_fill, market_value, unrealized_pnl, as_of_date, created_at, updated_at, status:"Status", fill_date:"Fill_date", exit_date:"Exit_date", avg_exit, strategy_id')
         .order('updated_at', { ascending: false });
 
       if (holdingsError) {
@@ -2810,6 +2999,7 @@
       const securitiesMap = {};
       const profilesMap = {};
       const onboardingPackDetailsMap = {};
+      const strategiesMap = {};
       if (securityIds.length) {
         const { data: securityRows, error: securityError } = await supabaseClient
           .from('securities')
@@ -2855,6 +3045,22 @@
         }
       }
 
+      const strategyIds = [...new Set(holdings.map((row) => row.strategy_id).filter(Boolean))];
+      if (strategyIds.length) {
+        const { data: strategyRows, error: strategyError } = await supabaseClient
+          .from('strategies')
+          .select('id, name, short_name, slug')
+          .in('id', strategyIds);
+
+        if (strategyError) {
+          console.error('Strategies load error:', strategyError);
+        } else {
+          (strategyRows || []).forEach((s) => {
+            strategiesMap[s.id] = s;
+          });
+        }
+      }
+
       const archivedSourceIds = getArchivedSourceIds();
       const latestArchiveCreatedAt = getLatestArchiveCreatedAt();
       updateOrderbookHeaderSequence();
@@ -2863,6 +3069,7 @@
         const security = securitiesMap[row.security_id] || {};
         const profile = profilesMap[row.user_id] || {};
         const packDetails = onboardingPackDetailsMap[row.user_id] || null;
+        const strategy = row.strategy_id ? (strategiesMap[row.strategy_id] || null) : null;
         const instrumentName = security.name || '-';
         const ticker = security.symbol ?? '-';
         const isin = security.isin ?? '-';
@@ -2944,6 +3151,10 @@
           settlementAccountOptions,
           brokerRef,
           brokerRefOptions,
+          strategyId: row.strategy_id || null,
+          strategyName: strategy?.name || null,
+          strategyShortName: strategy?.short_name || null,
+          strategySlug: strategy?.slug || null,
           timestamp
         };
       });
@@ -2962,7 +3173,8 @@
 
       allBirSourceRows = rawRows;
       allOrderbookRawRows = filteredRows;
-      return aggregateOrderbookRows(filteredRows);
+      const aggregated = aggregateOrderbookRows(filteredRows);
+      return groupByStrategy(aggregated, filteredRows);
     };
 
     const loadOrderbook = async () => {
