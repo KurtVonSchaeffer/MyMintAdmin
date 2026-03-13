@@ -756,6 +756,7 @@
                   <th>Ticker</th>
                   <th>Side</th>
                   <th>Total QYT</th>
+                  <th>Avg Fill</th>
                   <th>Market Value</th>
                   <th>Order Type</th>
                   <th>Settlement Account</th>
@@ -765,7 +766,7 @@
               </thead>
               <tbody id="orderbookTableBody">
                 <tr>
-                  <td class="orderbook-empty-row" colspan="10">Loading orderbook...</td>
+                  <td class="orderbook-empty-row" colspan="11">Loading orderbook...</td>
                 </tr>
               </tbody>
             </table>
@@ -1299,11 +1300,16 @@
         ].join('|');
 
         if (!groups.has(key)) {
+          const initialAvgFillNumber = Number(row.avgFillNumber);
+          const initialQtyWeight = Math.abs(Number(row.quantityValue || 0));
+          const hasInitialAvgFill = Number.isFinite(initialAvgFillNumber);
           groups.set(key, {
             ...row,
             quantityValue: Number(row.quantityValue || 0),
             marketValueNumber: Number(row.marketValueNumber || 0),
             unrealizedPnlNumber: Number(row.unrealizedPnlNumber || 0),
+            avgFillWeightedSum: hasInitialAvgFill ? initialAvgFillNumber * (initialQtyWeight > 0 ? initialQtyWeight : 1) : 0,
+            avgFillWeight: hasInitialAvgFill ? (initialQtyWeight > 0 ? initialQtyWeight : 1) : 0,
             sourceIds: row.sourceId ? [String(row.sourceId)] : [],
             bndRows: []
           });
@@ -1314,6 +1320,13 @@
         group.quantityValue += Number(row.quantityValue || 0);
         group.marketValueNumber += Number(row.marketValueNumber || 0);
         group.unrealizedPnlNumber += Number(row.unrealizedPnlNumber || 0);
+        const rowAvgFillNumber = Number(row.avgFillNumber);
+        if (Number.isFinite(rowAvgFillNumber)) {
+          const rowQtyWeight = Math.abs(Number(row.quantityValue || 0));
+          const weight = rowQtyWeight > 0 ? rowQtyWeight : 1;
+          group.avgFillWeightedSum += rowAvgFillNumber * weight;
+          group.avgFillWeight += weight;
+        }
         if (row.sourceId) {
           group.sourceIds.push(String(row.sourceId));
         }
@@ -1360,6 +1373,10 @@
           sourceId: normalizedSourceIds[0] || '',
           sourceIds: normalizedSourceIds,
           totalQuantity: group.quantityValue.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 }),
+          avgFillNumber: group.avgFillWeight > 0 ? (group.avgFillWeightedSum / group.avgFillWeight) : null,
+          avgFill: group.avgFillWeight > 0
+            ? `R ${(group.avgFillWeightedSum / group.avgFillWeight).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+            : '-',
           marketValue: `R ${group.marketValueNumber.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
           unrealizedPnl: group.unrealizedPnlNumber.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
           bndRows
@@ -1375,7 +1392,7 @@
     };
 
     const toCsvContent = (rows) => {
-      const header = ['Line', 'Instrument Name', 'Ticker', 'Side', 'Total QYT', 'Market Value', 'Order Type', 'Settlement Account', 'Broker Ref', 'Unrealized PnL'];
+      const header = ['Line', 'Instrument Name', 'Ticker', 'Side', 'Total QYT', 'Avg Fill', 'Market Value', 'Order Type', 'Settlement Account', 'Broker Ref', 'Unrealized PnL'];
       const csvLines = [header.map(normalizeCsv).join(',')];
 
       rows.forEach((row) => {
@@ -1385,6 +1402,7 @@
           row.ticker,
           row.side,
           row.totalQuantity,
+          asRandValue(row.avgFill),
           asRandValue(row.marketValue),
           row.orderType,
           row.settlementAccount,
@@ -2511,6 +2529,7 @@
               <td class="orderbook-cell-muted">${escapeHtml(row.ticker || '-')}</td>
               <td>${escapeHtml(row.side || '-')}</td>
               <td>${escapeHtml(String(row.totalQuantity ?? '-'))}</td>
+              <td>${escapeHtml(asRandValue(row.avgFill))}</td>
               <td>${escapeHtml(asRandValue(row.marketValue))}</td>
               <td>${escapeHtml(row.orderType || '-')}</td>
               <td>${escapeHtml(row.settlementAccount || '')}</td>
@@ -2518,7 +2537,7 @@
               <td>${escapeHtml(String(row.unrealizedPnl ?? '-'))}</td>
             </tr>
             <tr class="orderbook-detail-row is-hidden" data-archive-detail-row data-archive-line-key="${escapeHtml(rowKey)}">
-              <td colspan="10">
+              <td colspan="11">
                 <div class="orderbook-detail-wrap">
                   <div class="orderbook-detail-title">BND Allocation Details</div>
                   ${renderSnapshotBndDetailsTable(rows, row, book.sequence)}
@@ -2527,7 +2546,7 @@
             </tr>
           `;
           }).join('')
-          : '<tr><td class="orderbook-empty-row" colspan="10">No rows captured.</td></tr>';
+          : '<tr><td class="orderbook-empty-row" colspan="11">No rows captured.</td></tr>';
 
         return `
           <details class="filled-orderbook-item">
@@ -2549,6 +2568,7 @@
                       <th>Ticker</th>
                       <th>Side</th>
                       <th>Total QYT</th>
+                      <th>Avg Fill</th>
                       <th>Market Value</th>
                       <th>Order Type</th>
                       <th>Settlement Account</th>
@@ -2704,7 +2724,7 @@
       exportOrderbookBtn.disabled = rows.length === 0;
 
       if (!rows.length) {
-        orderbookTableBody.innerHTML = '<tr><td class="orderbook-empty-row" colspan="10">No orderbook records found.</td></tr>';
+        orderbookTableBody.innerHTML = '<tr><td class="orderbook-empty-row" colspan="11">No orderbook records found.</td></tr>';
         return;
       }
 
@@ -2726,6 +2746,7 @@
             <td class="orderbook-cell-muted">${escapeHtml(row.ticker || '-')}</td>
             <td>${escapeHtml(row.side || '-')}</td>
             <td>${escapeHtml(String(row.totalQuantity ?? '-'))}</td>
+            <td>${escapeHtml(asRandValue(row.avgFill))}</td>
             <td>${escapeHtml(asRandValue(row.marketValue))}</td>
             <td>${escapeHtml(row.orderType || '-')}</td>
             <td>
@@ -2741,7 +2762,7 @@
             <td>${escapeHtml(String(row.unrealizedPnl ?? '-'))}</td>
           </tr>
           <tr class="orderbook-detail-row is-hidden" data-orderbook-detail-row data-line-key="${lineKey}">
-            <td colspan="10">
+            <td colspan="11">
               <div class="orderbook-detail-wrap">
                 <div class="orderbook-detail-title">BND Allocation Details</div>
                 ${renderBndDetailsTable(row)}
@@ -2866,6 +2887,8 @@
         const brokerRefOptions = ['Longmark'];
         const quantityValue = Number(row.quantity);
         const isQuantityNumeric = Number.isFinite(quantityValue);
+        const avgFillValue = Number(row.avg_fill);
+        const hasAvgFill = Number.isFinite(avgFillValue);
         const lastPrice = Number(security.last_price);
         const hasLastPrice = Number.isFinite(lastPrice);
         const computedMarketValueNumber = (isQuantityNumeric && hasLastPrice)
@@ -2880,6 +2903,9 @@
         const totalQuantity = isQuantityNumeric
           ? quantityValue.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })
           : (row.quantity ?? '-');
+        const avgFill = hasAvgFill
+          ? `R ${avgFillValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+          : '-';
         const marketValue = (isQuantityNumeric && hasLastPrice)
           ? `R ${computedMarketValueNumber.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
           : '-';
@@ -2907,6 +2933,8 @@
           side,
           quantityValue: isQuantityNumeric ? quantityValue : 0,
           totalQuantity,
+          avgFillNumber: hasAvgFill ? avgFillValue : null,
+          avgFill,
           marketValueNumber: computedMarketValueNumber,
           marketValue,
           unrealizedPnlNumber: normalizedUnrealizedPnlNumber,
