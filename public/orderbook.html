@@ -800,8 +800,10 @@
       <div class="orderbook-tab-panel" id="closedBooksPanel" role="tabpanel" aria-labelledby="closedBooksTab">
         <div class="closed-books-card">
           <h2 class="closed-books-title">Closed Books</h2>
-          <p class="closed-books-subtitle">Closed-book logic is not enabled yet.</p>
-          <div class="filled-orderbook-empty">No closed books yet.</div>
+          <p class="closed-books-subtitle">Books move here once every holding is filled and shares the same fill date.</p>
+          <div class="filled-orderbooks-list" id="closedBooksList">
+            <div class="filled-orderbook-empty">No closed books yet.</div>
+          </div>
         </div>
       </div>
 
@@ -859,6 +861,7 @@
     const activeBooksPanel = document.getElementById('activeBooksPanel');
     const strateBirPanel = document.getElementById('strateBirPanel');
     const closedBooksPanel = document.getElementById('closedBooksPanel');
+    const closedBooksList = document.getElementById('closedBooksList');
     const strateBirCount = document.getElementById('strateBirCount');
     const exportStrateBirBtn = document.getElementById('exportStrateBirBtn');
     const toggleStrateBirViewBtn = document.getElementById('toggleStrateBirViewBtn');
@@ -884,6 +887,8 @@
     const FILLED_ARCHIVE_KEY = 'filled-orderbooks-archive-v1';
     const ARCHIVE_BACKFILL_KEY = 'orderbook-archive-backfill-v2';
     let filledOrderbooksArchive = [];
+    let holdingFillDateById = new Map();
+    let strategyFillStateById = new Map();
 
     const requireSession = async () => {
       const { data } = await supabaseClient.auth.getSession();
@@ -2691,15 +2696,59 @@
       }
     };
 
+    const isBookFullyClosed = (book) => {
+      const rows = Array.isArray(book?.rows) ? book.rows : [];
+      if (!rows.length) return { closed: false, fillDate: null };
+      if (!holdingFillDateById.size) return { closed: false, fillDate: null };
+
+      let allFilled = true;
+      let sharedFillDate = null;
+
+      const checkSourceId = (sid) => {
+        if (!sid) { allFilled = false; return; }
+        const fd = holdingFillDateById.get(String(sid));
+        if (!fd) { allFilled = false; return; }
+        if (!sharedFillDate) sharedFillDate = fd;
+      };
+
+      for (const row of rows) {
+        if (row.isStrategy && Array.isArray(row.strategyHoldings)) {
+          for (const h of row.strategyHoldings) {
+            const ids = Array.isArray(h.sourceIds) && h.sourceIds.length ? h.sourceIds : (h.sourceId ? [h.sourceId] : []);
+            if (!ids.length) { allFilled = false; break; }
+            ids.forEach(checkSourceId);
+            if (!allFilled) break;
+          }
+        } else {
+          const ids = Array.isArray(row.sourceIds) && row.sourceIds.length ? row.sourceIds : (row.sourceId ? [row.sourceId] : []);
+          if (!ids.length) { allFilled = false; break; }
+          ids.forEach(checkSourceId);
+        }
+        if (!allFilled) break;
+      }
+
+      return { closed: allFilled, fillDate: sharedFillDate };
+    };
+
     const renderFilledOrderbooks = () => {
       if (!filledOrderbooksList) return;
 
-      if (!filledOrderbooksArchive.length) {
-        filledOrderbooksList.innerHTML = '<div class="filled-orderbook-empty">No active order books yet.</div>';
-        return;
-      }
+      const activeBooks = [];
+      const closedBooks = [];
 
-      const sorted = filledOrderbooksArchive.slice().sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      filledOrderbooksArchive.forEach((book) => {
+        const result = isBookFullyClosed(book);
+        if (result.closed) {
+          closedBooks.push({ ...book, sharedFillDate: result.fillDate });
+        } else {
+          activeBooks.push(book);
+        }
+      });
+
+      if (!activeBooks.length) {
+        filledOrderbooksList.innerHTML = '<div class="filled-orderbook-empty">No active order books yet.</div>';
+      } else {
+        const sorted = activeBooks.slice().sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
       filledOrderbooksList.innerHTML = sorted.map((book) => {
         const rows = Array.isArray(book.rows) ? book.rows : [];
@@ -2739,6 +2788,90 @@
                 <span>${escapeHtml(book.dateLabel || '-')}</span>
                 ${book.sentAt ? `<span>Sent: ${escapeHtml(new Date(book.sentAt).toLocaleString())}</span>` : ''}
                 <span data-book-id="${escapeHtml(String(book.id || ''))}">${emailStatusChip(book.emailStatus)}</span>
+              </span>
+            </summary>
+            <div class="filled-orderbook-details">
+              <div class="orderbook-table-wrap">
+                <table class="orderbook-table">
+                  <thead>
+                    <tr>
+                      <th>Line</th>
+                      <th>Instrument Name</th>
+                      <th>Ticker</th>
+                      <th>Side</th>
+                      <th>Total QYT</th>
+                      <th>Avg Fill</th>
+                      <th>Total Fill</th>
+                      <th>Order Type</th>
+                      <th>Settlement Account</th>
+                      <th>Broker Ref</th>
+                      <th>Unrealized PnL</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${body}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </details>
+        `;
+      }).join('');
+      }
+
+      renderClosedBooks(closedBooks);
+    };
+
+    const renderClosedBooks = (closedBooks) => {
+      if (!closedBooksList) return;
+
+      if (!closedBooks.length) {
+        closedBooksList.innerHTML = '<div class="filled-orderbook-empty">No closed books yet.</div>';
+        return;
+      }
+
+      const sorted = closedBooks.slice().sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+      closedBooksList.innerHTML = sorted.map((book) => {
+        const rows = Array.isArray(book.rows) ? book.rows : [];
+        const fillDateLabel = book.sharedFillDate
+          ? new Date(book.sharedFillDate).toLocaleDateString()
+          : '-';
+        const body = rows.length
+          ? rows.map((row, rowIndex) => {
+            const rowKey = `closed-${String(book.id || 'book')}-${rowIndex}`;
+            return `
+            <tr class="orderbook-main-row" data-closed-main-row data-closed-line-key="${escapeHtml(rowKey)}">
+              <td>${escapeHtml(String(row.line ?? '-'))}</td>
+              <td>${escapeHtml(row.instrumentName || '-')}</td>
+              <td class="orderbook-cell-muted">${escapeHtml(row.ticker || '-')}</td>
+              <td>${escapeHtml(row.side || '-')}</td>
+              <td>${escapeHtml(String(row.totalQuantity ?? '-'))}</td>
+              <td>${escapeHtml(asRandValue(row.avgFill))}</td>
+              <td>${escapeHtml(asRandValue(row.marketValue))}</td>
+              <td>${escapeHtml(row.orderType || '-')}</td>
+              <td>${escapeHtml(row.settlementAccount || '')}</td>
+              <td>${escapeHtml(row.brokerRef || '')}</td>
+              <td>${escapeHtml(String(row.unrealizedPnl ?? '-'))}</td>
+            </tr>
+            <tr class="orderbook-detail-row is-hidden" data-closed-detail-row data-closed-line-key="${escapeHtml(rowKey)}">
+              <td colspan="11">
+                <div class="orderbook-detail-wrap">
+                  ${row.isStrategy ? renderStrategyDetailsTable(row) : `<div class="orderbook-detail-title">BND Allocation Details</div>${renderSnapshotBndDetailsTable(rows, row, book.sequence)}`}
+                </div>
+              </td>
+            </tr>
+          `;
+          }).join('')
+          : '<tr><td class="orderbook-empty-row" colspan="11">No rows captured.</td></tr>';
+
+        return `
+          <details class="filled-orderbook-item">
+            <summary class="filled-orderbook-summary">
+              <span>${escapeHtml(formatBookTitle(book))}</span>
+              <span class="filled-orderbook-meta">
+                <span style="background:#ecfdf3;color:#166534;border:1px solid #86efac;border-radius:999px;padding:3px 8px;font-size:0.72rem;font-weight:700;">Filled: ${escapeHtml(fillDateLabel)}</span>
+                <span>${escapeHtml(book.dateLabel || '-')}</span>
               </span>
             </summary>
             <div class="filled-orderbook-details">
@@ -2986,6 +3119,12 @@
       }
 
       const holdings = holdingsRows || [];
+      holdingFillDateById.clear();
+      holdings.forEach((h) => {
+        if (h.id && h.fill_date) {
+          holdingFillDateById.set(String(h.id), String(h.fill_date));
+        }
+      });
       const securityIds = [...new Set(holdings.map((row) => row.security_id).filter(Boolean))];
       const userIds = [...new Set(holdings.map((row) => row.user_id).filter(Boolean))];
 
@@ -3149,7 +3288,8 @@
           strategyName: strategy?.name || null,
           strategyShortName: strategy?.short_name || null,
           strategySlug: strategy?.slug || null,
-          timestamp
+          timestamp,
+          fillDate: row.fill_date || null
         };
       });
 
@@ -3254,6 +3394,36 @@
 
         const detailRows = Array.from(tableBody.querySelectorAll('[data-archive-detail-row]'));
         const detailRow = detailRows.find((row) => row.dataset.archiveLineKey === rowKey);
+        if (!detailRow) return;
+
+        const willOpen = detailRow.classList.contains('is-hidden');
+        detailRows.forEach((row) => {
+          row.classList.add('is-hidden');
+        });
+
+        if (willOpen) {
+          detailRow.classList.remove('is-hidden');
+        }
+      });
+    }
+
+    if (closedBooksList) {
+      closedBooksList.addEventListener('click', (event) => {
+        if (event.target.closest('button, a, input, select, summary')) {
+          return;
+        }
+
+        const mainRow = event.target.closest('[data-closed-main-row]');
+        if (!mainRow) return;
+
+        const rowKey = mainRow.dataset.closedLineKey;
+        if (!rowKey) return;
+
+        const tableBody = mainRow.closest('tbody');
+        if (!tableBody) return;
+
+        const detailRows = Array.from(tableBody.querySelectorAll('[data-closed-detail-row]'));
+        const detailRow = detailRows.find((row) => row.dataset.closedLineKey === rowKey);
         if (!detailRow) return;
 
         const willOpen = detailRow.classList.contains('is-hidden');
