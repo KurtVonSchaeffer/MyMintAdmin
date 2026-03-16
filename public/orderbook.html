@@ -926,6 +926,8 @@
     let holdingFillDateById = new Map();
     let strategyFillStateById = new Map();
     let showActiveBooksFilledColumn = false;
+    const ARCHIVE_LIVE_SYNC_INTERVAL_MS = 60000;
+    let archiveLiveSyncHandle = null;
 
     const requireSession = async () => {
       const { data } = await supabaseClient.auth.getSession();
@@ -2828,6 +2830,291 @@
       };
     };
 
+    const buildLiveHoldingMapById = () => {
+      const map = new Map();
+      (allBirSourceRows || []).forEach((row) => {
+        const id = row?.sourceId ? String(row.sourceId) : '';
+        if (!id) return;
+        map.set(id, row);
+      });
+      return map;
+    };
+
+    const formatQuantityText = (value) => {
+      const numeric = Number(value);
+      if (!Number.isFinite(numeric)) return '-';
+      return numeric.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 });
+    };
+
+    const formatMoneyText = (value) => {
+      const numeric = Number(value);
+      if (!Number.isFinite(numeric)) return '-';
+      return `R ${numeric.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    };
+
+    const reconcileLeafArchiveRowWithLive = (row, liveById) => {
+      const ids = getRowHoldingIds(row);
+      if (!ids.length) return { row, changed: false };
+
+      const liveRows = ids.map((id) => liveById.get(String(id))).filter(Boolean);
+      if (!liveRows.length) return { row, changed: false };
+
+      let qtyTotal = 0;
+      let mvTotal = 0;
+      let pnlTotal = 0;
+      let avgWeighted = 0;
+      let avgWeight = 0;
+      let latestTimestamp = null;
+      let latestFillDate = null;
+
+      liveRows.forEach((live) => {
+        const q = Number(live.quantityValue || 0);
+        const mv = Number(live.marketValueNumber || 0);
+        const pnl = Number(live.unrealizedPnlNumber || 0);
+        const avg = Number(live.avgFillNumber);
+
+        if (Number.isFinite(q)) qtyTotal += q;
+        if (Number.isFinite(mv)) mvTotal += mv;
+        if (Number.isFinite(pnl)) pnlTotal += pnl;
+        if (Number.isFinite(avg)) {
+          const w = Math.abs(q) || 1;
+          avgWeighted += (avg * w);
+          avgWeight += w;
+        }
+
+        if (live.timestamp) {
+          const t = new Date(live.timestamp).getTime();
+          if (Number.isFinite(t) && (!latestTimestamp || t > new Date(latestTimestamp).getTime())) {
+            latestTimestamp = live.timestamp;
+          }
+        }
+
+        if (live.fillDate) {
+          const ft = new Date(live.fillDate).getTime();
+          if (Number.isFinite(ft) && (!latestFillDate || ft > new Date(latestFillDate).getTime())) {
+            latestFillDate = live.fillDate;
+          }
+        }
+      });
+
+      const next = {
+        ...row,
+        sourceIds: ids,
+        sourceId: ids[0] || row.sourceId || '',
+        quantityValue: qtyTotal,
+        totalQuantity: formatQuantityText(qtyTotal),
+        marketValueNumber: mvTotal,
+        marketValue: formatMoneyText(mvTotal),
+        unrealizedPnlNumber: pnlTotal,
+        unrealizedPnl: Number.isFinite(pnlTotal)
+          ? pnlTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+          : (row.unrealizedPnl ?? '-'),
+        side: Number.isFinite(qtyTotal) ? (qtyTotal < 0 ? 'SELL' : 'BUY') : (row.side || '-'),
+        timestamp: latestTimestamp || row.timestamp || null,
+        fillDate: latestFillDate || row.fillDate || null
+      };
+
+      if (avgWeight > 0) {
+        const avgFillNumber = avgWeighted / avgWeight;
+        next.avgFillNumber = avgFillNumber;
+        next.avgFill = formatMoneyText(avgFillNumber);
+      }
+
+      const changed = JSON.stringify({
+        sourceIds: row.sourceIds || [],
+        sourceId: row.sourceId || '',
+        quantityValue: row.quantityValue,
+        totalQuantity: row.totalQuantity,
+        marketValueNumber: row.marketValueNumber,
+        marketValue: row.marketValue,
+        unrealizedPnlNumber: row.unrealizedPnlNumber,
+        unrealizedPnl: row.unrealizedPnl,
+        avgFillNumber: row.avgFillNumber,
+        avgFill: row.avgFill,
+        timestamp: row.timestamp,
+        fillDate: row.fillDate
+      }) !== JSON.stringify({
+        sourceIds: next.sourceIds || [],
+        sourceId: next.sourceId || '',
+        quantityValue: next.quantityValue,
+        totalQuantity: next.totalQuantity,
+        marketValueNumber: next.marketValueNumber,
+        marketValue: next.marketValue,
+        unrealizedPnlNumber: next.unrealizedPnlNumber,
+        unrealizedPnl: next.unrealizedPnl,
+        avgFillNumber: next.avgFillNumber,
+        avgFill: next.avgFill,
+        timestamp: next.timestamp,
+        fillDate: next.fillDate
+      });
+
+      return { row: next, changed };
+    };
+
+    const reconcileStrategyArchiveRowWithLive = (row, liveById) => {
+      const holdings = Array.isArray(row?.strategyHoldings) ? row.strategyHoldings : [];
+      if (!holdings.length) {
+        return reconcileLeafArchiveRowWithLive(row, liveById);
+      }
+
+      let changed = false;
+      const nextHoldings = holdings.map((holding, index) => {
+        const result = reconcileLeafArchiveRowWithLive(holding, liveById);
+        if (result.changed) changed = true;
+        return { ...result.row, line: index + 1 };
+      });
+
+      let qtyTotal = 0;
+      let mvTotal = 0;
+      let pnlTotal = 0;
+      let avgWeighted = 0;
+      let avgWeight = 0;
+      let latestTimestamp = null;
+      let latestFillDate = null;
+      const sourceIds = new Set();
+
+      nextHoldings.forEach((holding) => {
+        const q = Number(holding.quantityValue || 0);
+        const mv = Number(holding.marketValueNumber || 0);
+        const pnl = Number(holding.unrealizedPnlNumber || 0);
+        const avg = Number(holding.avgFillNumber);
+
+        if (Number.isFinite(q)) qtyTotal += q;
+        if (Number.isFinite(mv)) mvTotal += mv;
+        if (Number.isFinite(pnl)) pnlTotal += pnl;
+
+        if (Number.isFinite(avg)) {
+          const w = Math.abs(q) || 1;
+          avgWeighted += (avg * w);
+          avgWeight += w;
+        }
+
+        if (holding.timestamp) {
+          const t = new Date(holding.timestamp).getTime();
+          if (Number.isFinite(t) && (!latestTimestamp || t > new Date(latestTimestamp).getTime())) {
+            latestTimestamp = holding.timestamp;
+          }
+        }
+
+        if (holding.fillDate) {
+          const ft = new Date(holding.fillDate).getTime();
+          if (Number.isFinite(ft) && (!latestFillDate || ft > new Date(latestFillDate).getTime())) {
+            latestFillDate = holding.fillDate;
+          }
+        }
+
+        if (Array.isArray(holding.sourceIds)) {
+          holding.sourceIds.forEach((id) => {
+            if (id) sourceIds.add(String(id));
+          });
+        }
+        if (holding.sourceId) {
+          sourceIds.add(String(holding.sourceId));
+        }
+      });
+
+      const next = {
+        ...row,
+        strategyHoldings: nextHoldings,
+        sourceIds: Array.from(sourceIds),
+        sourceId: Array.from(sourceIds)[0] || row.sourceId || '',
+        quantityValue: qtyTotal,
+        totalQuantity: formatQuantityText(qtyTotal),
+        marketValueNumber: mvTotal,
+        marketValue: formatMoneyText(mvTotal),
+        unrealizedPnlNumber: pnlTotal,
+        unrealizedPnl: Number.isFinite(pnlTotal)
+          ? pnlTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+          : (row.unrealizedPnl ?? '-'),
+        side: Number.isFinite(qtyTotal) ? (qtyTotal < 0 ? 'SELL' : 'BUY') : (row.side || '-'),
+        timestamp: latestTimestamp || row.timestamp || null,
+        fillDate: latestFillDate || row.fillDate || null
+      };
+
+      if (avgWeight > 0) {
+        const avgFillNumber = avgWeighted / avgWeight;
+        next.avgFillNumber = avgFillNumber;
+        next.avgFill = formatMoneyText(avgFillNumber);
+      }
+
+      const parentChanged = JSON.stringify({
+        sourceIds: row.sourceIds || [],
+        sourceId: row.sourceId || '',
+        quantityValue: row.quantityValue,
+        totalQuantity: row.totalQuantity,
+        marketValueNumber: row.marketValueNumber,
+        marketValue: row.marketValue,
+        unrealizedPnlNumber: row.unrealizedPnlNumber,
+        unrealizedPnl: row.unrealizedPnl,
+        avgFillNumber: row.avgFillNumber,
+        avgFill: row.avgFill,
+        timestamp: row.timestamp,
+        fillDate: row.fillDate
+      }) !== JSON.stringify({
+        sourceIds: next.sourceIds || [],
+        sourceId: next.sourceId || '',
+        quantityValue: next.quantityValue,
+        totalQuantity: next.totalQuantity,
+        marketValueNumber: next.marketValueNumber,
+        marketValue: next.marketValue,
+        unrealizedPnlNumber: next.unrealizedPnlNumber,
+        unrealizedPnl: next.unrealizedPnl,
+        avgFillNumber: next.avgFillNumber,
+        avgFill: next.avgFill,
+        timestamp: next.timestamp,
+        fillDate: next.fillDate
+      });
+
+      return { row: next, changed: changed || parentChanged };
+    };
+
+    const reconcileArchivedBooksWithLiveHoldings = async () => {
+      if (!Array.isArray(filledOrderbooksArchive) || !filledOrderbooksArchive.length) return;
+      if (!Array.isArray(allBirSourceRows) || !allBirSourceRows.length) return;
+
+      const liveById = buildLiveHoldingMapById();
+      const changedBooks = [];
+
+      const nextArchive = filledOrderbooksArchive.map((book) => {
+        const rows = Array.isArray(book?.rows) ? book.rows : [];
+        let bookChanged = false;
+
+        const nextRows = rows.map((row, index) => {
+          const result = row?.isStrategy
+            ? reconcileStrategyArchiveRowWithLive(row, liveById)
+            : reconcileLeafArchiveRowWithLive(row, liveById);
+
+          if (result.changed) bookChanged = true;
+          return { ...result.row, line: index + 1 };
+        });
+
+        if (!bookChanged) {
+          return book;
+        }
+
+        const nextBook = {
+          ...book,
+          rows: nextRows
+        };
+        changedBooks.push(nextBook);
+        return nextBook;
+      });
+
+      if (!changedBooks.length) return;
+
+      filledOrderbooksArchive = nextArchive;
+      persistFilledArchive();
+      renderFilledOrderbooks();
+
+      for (const book of changedBooks) {
+        try {
+          await upsertFilledArchiveToDb(book);
+        } catch (error) {
+          console.error('Archive live sync upsert failed:', error?.message || error);
+        }
+      }
+    };
+
     const isBookFullyClosed = (book) => {
       const rows = Array.isArray(book?.rows) ? book.rows : [];
       if (!rows.length) return { closed: false, latestFillDate: null };
@@ -3448,6 +3735,7 @@
 
       try {
         allOrderbookRows = await loadOrderbookClientSideFallback();
+        await reconcileArchivedBooksWithLiveHoldings();
         // Re-classify archived books now that holdingFillDateById has been populated.
         renderFilledOrderbooks();
         await maybeBackfillLegacyArchiveSnapshots();
@@ -3460,6 +3748,18 @@
         allBirSourceRows = [];
         renderStrateBirPreview();
       }
+    };
+
+    const startArchiveLiveSync = () => {
+      if (archiveLiveSyncHandle) {
+        clearInterval(archiveLiveSyncHandle);
+      }
+
+      archiveLiveSyncHandle = setInterval(() => {
+        loadOrderbook().catch((error) => {
+          console.error('Archive live sync failed:', error?.message || error);
+        });
+      }, ARCHIVE_LIVE_SYNC_INTERVAL_MS);
     };
 
     if (orderbookSearch) {
@@ -3704,6 +4004,7 @@
       }
 
       loadOrderbook();
+      startArchiveLiveSync();
     });
 
     startOrderbookTimer();
