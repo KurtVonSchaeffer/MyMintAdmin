@@ -3662,7 +3662,6 @@
       }
 
       const archivedSourceIds = getArchivedSourceIds();
-      const latestArchiveCreatedAt = getLatestArchiveCreatedAt();
       updateOrderbookHeaderSequence();
 
       const rawRows = holdings.map((row, index) => {
@@ -3766,11 +3765,9 @@
           return false;
         }
 
-        if (!latestArchiveCreatedAt || !row.timestamp) {
-          return true;
-        }
-
-        return new Date(row.timestamp).getTime() > new Date(latestArchiveCreatedAt).getTime();
+        // Keep live holdings visible unless explicitly archived by source id.
+        // Timestamp-based cutoffs can hide valid inserts that arrive with older dates.
+        return true;
       });
 
       allBirSourceRows = rawRows;
