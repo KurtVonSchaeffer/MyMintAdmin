@@ -2605,16 +2605,20 @@
           submitButton.innerHTML = "<span>Saving...</span>";
         }
 
-        let error;
+        let error, newStrategyId;
         if (isEditing) {
           ({ error } = await supabaseClient
             .from("strategies")
             .update(payload)
             .eq("id", editingStrategyId));
         } else {
-          ({ error } = await supabaseClient
+          const { data: insertData, error: insertError } = await supabaseClient
             .from("strategies")
-            .insert([payload]));
+            .insert([payload])
+            .select("id")
+            .single();
+          error = insertError;
+          newStrategyId = insertData?.id || null;
         }
 
         if (submitButton) {
@@ -2630,20 +2634,31 @@
           return;
         }
 
-        editingStrategyId = null;
-        strategyForm.reset();
-        formHoldings = [];
-        renderFormHoldings();
-        recalculate();
+        /* For new strategies, keep the new tab active after reload */
+        if (!isEditing && newStrategyId) {
+          activeStrategyTabId = newStrategyId;
+        }
+
         if (strategySubmitBtn)
           strategySubmitBtn.querySelector("span").textContent = "Save strategy";
         showFormMessage(
           isEditing
             ? "Strategy updated successfully."
-            : "Strategy saved and will appear on Mint.",
+            : "Strategy saved.",
           "success",
         );
         await loadStrategies();
+
+        /* Re-open the saved strategy in the workspace so the tab stays active */
+        if (activeStrategyTabId) {
+          const saved = (allStrategiesFullData || []).find(
+            (s) => s.id === activeStrategyTabId,
+          );
+          if (saved) {
+            setStrategyWorkspaceVisible(true);
+            await editStrategy(saved, globalSecuritiesMap);
+          }
+        }
       };
 
       /* ─────────────────────── FACTSHEETS TAB LOGIC ─────────────────────── */
