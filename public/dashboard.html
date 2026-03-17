@@ -4036,7 +4036,7 @@
             tabInput.disabled = true;
             const { data: insertData, error } = await supabaseClient
               .from("strategies")
-              .insert([{ name, status: "active" }])
+              .insert([{ name, slug: createStrategySlug(name), status: "active" }])
               .select("id")
               .single();
             if (error || !insertData?.id) {
