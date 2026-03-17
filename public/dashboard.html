@@ -1884,6 +1884,9 @@
       };
       const removeHolding = (index) => {
         formHoldings.splice(index, 1);
+        if (formHoldings.length === 0 && !activeStrategyTabId) {
+          setStrategyWorkspaceVisible(false);
+        }
         renderFormHoldings();
         recalculate();
       };
@@ -3952,6 +3955,7 @@
             /* Clicking the already-active tab deselects it */
             if (activeStrategyTabId === strategy.id) {
               activeStrategyTabId = null;
+              formHoldings = [];
               setStrategyWorkspaceVisible(false);
               renderStrategyTabs();
               return;
