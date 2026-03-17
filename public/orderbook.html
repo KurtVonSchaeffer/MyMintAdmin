@@ -929,6 +929,7 @@
     const orderbookTimer = document.getElementById('orderbookTimer');
     const filledOrderbooksList = document.getElementById('filledOrderbooksList');
     const orderbookTitle = document.getElementById('orderbookTitle');
+    const orderbookSidebarLink = document.querySelector('.sidebar-nav a.nav-icon[href="/orderbook.html"]');
     const activeBooksTab = document.getElementById('activeBooksTab');
     const strateBirTab = document.getElementById('strateBirTab');
     const closedBooksTab = document.getElementById('closedBooksTab');
@@ -965,8 +966,6 @@
     let strategyFillStateById = new Map();
     let showActiveBooksFilledColumn = false;
     let isArchiveBooksLoading = true;
-    const ARCHIVE_LIVE_SYNC_INTERVAL_MS = 60000;
-    let archiveLiveSyncHandle = null;
 
     const requireSession = async () => {
       const { data } = await supabaseClient.auth.getSession();
@@ -3806,28 +3805,35 @@
       }
     };
 
-    const startArchiveLiveSync = () => {
-      if (archiveLiveSyncHandle) {
-        clearInterval(archiveLiveSyncHandle);
-      }
-
-      archiveLiveSyncHandle = setInterval(() => {
-        loadOrderbook().catch((error) => {
-          console.error('Archive live sync failed:', error?.message || error);
-        });
-      }, ARCHIVE_LIVE_SYNC_INTERVAL_MS);
-    };
-
     if (orderbookSearch) {
       orderbookSearch.addEventListener('input', applySearchFilter);
     }
 
     if (activeBooksTab) {
-      activeBooksTab.addEventListener('click', () => setActiveTab('active'));
+      activeBooksTab.addEventListener('click', () => {
+        setActiveTab('active');
+        loadOrderbook().catch((error) => {
+          console.error('Orderbook refresh failed:', error?.message || error);
+        });
+      });
     }
 
     if (closedBooksTab) {
-      closedBooksTab.addEventListener('click', () => setActiveTab('closed'));
+      closedBooksTab.addEventListener('click', () => {
+        setActiveTab('closed');
+        loadOrderbook().catch((error) => {
+          console.error('Orderbook refresh failed:', error?.message || error);
+        });
+      });
+    }
+
+    if (orderbookSidebarLink) {
+      orderbookSidebarLink.addEventListener('click', (event) => {
+        event.preventDefault();
+        loadOrderbook().catch((error) => {
+          console.error('Orderbook refresh failed:', error?.message || error);
+        });
+      });
     }
 
     if (strateBirTab) {
@@ -4060,7 +4066,6 @@
       }
 
       loadOrderbook();
-      startArchiveLiveSync();
     });
 
     startOrderbookTimer();
