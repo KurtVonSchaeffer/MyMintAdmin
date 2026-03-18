@@ -245,6 +245,54 @@ const fetchSupabaseJson = async (path, token, useServiceRoleAuth = true) => {
   return payload;
 };
 
+const fetchSupabase = async ({
+  method = 'GET',
+  path,
+  token,
+  useServiceRoleAuth = true,
+  body,
+  prefer = null
+}) => {
+  if (!supabaseUrl || !supabaseServiceRoleKey) {
+    throw new Error('Supabase server credentials are not configured');
+  }
+
+  const url = `${supabaseUrl}${path}`;
+  const authToken = useServiceRoleAuth ? supabaseServiceRoleKey : token;
+  const headers = {
+    'apikey': supabaseServiceRoleKey,
+    'Authorization': `Bearer ${authToken}`,
+    'Accept': 'application/json'
+  };
+
+  if (body !== undefined) {
+    headers['Content-Type'] = 'application/json';
+  }
+  if (prefer) {
+    headers['Prefer'] = prefer;
+  }
+
+  const response = await fetch(url, {
+    method,
+    headers,
+    body: body !== undefined ? JSON.stringify(body) : undefined
+  });
+
+  let payload = null;
+  try {
+    payload = await response.json();
+  } catch {
+    payload = null;
+  }
+
+  if (!response.ok) {
+    const message = payload?.message || payload?.error || `Supabase request failed with status ${response.status}`;
+    throw new Error(message);
+  }
+
+  return payload;
+};
+
 const buildInFilter = (values) => values
   .map((value) => encodeURIComponent(String(value)))
   .join(',');
@@ -448,6 +496,138 @@ const server = http.createServer((req, res) => {
       } catch (error) {
         sendJson(res, 500, {
           error: 'Could not load orderbook data',
+          details: error?.message || 'Unknown error'
+        });
+      }
+    })();
+
+    return;
+  }
+
+  if (req.url.startsWith('/api/rebalancing/commit') && req.method === 'POST') {
+    const token = parseBearerToken(req.headers.authorization);
+    if (!token) {
+      sendJson(res, 401, { error: 'Missing Authorization bearer token' });
+      return;
+    }
+
+    (async () => {
+      try {
+        await fetchSupabaseJson('/auth/v1/user', token, false);
+        const body = await readJsonBody(req);
+        const strategyId = String(body?.strategyId || '').trim();
+        const incomingDeltas = Array.isArray(body?.deltas) ? body.deltas : [];
+
+        if (!strategyId) {
+          sendJson(res, 400, { error: 'strategyId is required' });
+          return;
+        }
+        if (!incomingDeltas.length) {
+          sendJson(res, 400, { error: 'No trade deltas provided' });
+          return;
+        }
+
+        const aggregatedByKey = new Map();
+        for (const row of incomingDeltas) {
+          const userId = String(row?.userId || '').trim();
+          const symbol = String(row?.symbol || '').trim();
+          const quantityDelta = Number(row?.quantityDelta || 0);
+          if (!userId || !symbol || !Number.isFinite(quantityDelta) || quantityDelta === 0) continue;
+          const key = `${userId}|${symbol}`;
+          aggregatedByKey.set(key, (aggregatedByKey.get(key) || 0) + quantityDelta);
+        }
+
+        if (!aggregatedByKey.size) {
+          sendJson(res, 400, { error: 'No valid trade deltas provided' });
+          return;
+        }
+
+        const symbols = [...new Set([...aggregatedByKey.keys()].map((k) => k.split('|')[1]))];
+        const secRows = await fetchSupabase({
+          method: 'GET',
+          path: `/rest/v1/securities?select=id,symbol&symbol=in.(${buildInFilter(symbols)})`
+        });
+
+        const secIdBySymbol = (secRows || []).reduce((acc, row) => {
+          acc[String(row.symbol)] = String(row.id);
+          return acc;
+        }, {});
+
+        const normalizedDeltas = [];
+        for (const [key, delta] of aggregatedByKey.entries()) {
+          const [userId, symbol] = key.split('|');
+          const securityId = secIdBySymbol[symbol];
+          if (!securityId) continue;
+          normalizedDeltas.push({ userId, symbol, securityId, quantityDelta: delta });
+        }
+
+        if (!normalizedDeltas.length) {
+          sendJson(res, 400, { error: 'Could not resolve any security IDs for deltas' });
+          return;
+        }
+
+        const userIds = [...new Set(normalizedDeltas.map((d) => d.userId))];
+        const securityIds = [...new Set(normalizedDeltas.map((d) => d.securityId))];
+
+        const existingRows = await fetchSupabase({
+          method: 'GET',
+          path: `/rest/v1/stock_holdings?select=id,user_id,security_id,quantity&strategy_id=eq.${encodeURIComponent(strategyId)}&user_id=in.(${buildInFilter(userIds)})&security_id=in.(${buildInFilter(securityIds)})`
+        });
+
+        const rowByKey = {};
+        (existingRows || []).forEach((row) => {
+          const key = `${row.user_id}|${row.security_id}`;
+          if (!rowByKey[key]) rowByKey[key] = row;
+        });
+
+        const nowIso = new Date().toISOString();
+        let updated = 0;
+        const inserts = [];
+
+        for (const deltaRow of normalizedDeltas) {
+          const { userId, securityId, quantityDelta } = deltaRow;
+          const key = `${userId}|${securityId}`;
+          const existing = rowByKey[key];
+
+          if (existing) {
+            const currentQty = Number(existing.quantity || 0);
+            const nextQty = Math.max(0, currentQty + Number(quantityDelta || 0));
+            await fetchSupabase({
+              method: 'PATCH',
+              path: `/rest/v1/stock_holdings?id=eq.${encodeURIComponent(existing.id)}`,
+              body: { quantity: nextQty, updated_at: nowIso },
+              prefer: 'return=minimal'
+            });
+            updated += 1;
+          } else if (quantityDelta > 0) {
+            inserts.push({
+              user_id: userId,
+              security_id: securityId,
+              quantity: Number(quantityDelta),
+              strategy_id: strategyId,
+              updated_at: nowIso
+            });
+          }
+        }
+
+        if (inserts.length) {
+          await fetchSupabase({
+            method: 'POST',
+            path: '/rest/v1/stock_holdings',
+            body: inserts,
+            prefer: 'return=minimal'
+          });
+        }
+
+        sendJson(res, 200, {
+          ok: true,
+          updated,
+          inserted: inserts.length,
+          processed: normalizedDeltas.length
+        });
+      } catch (error) {
+        sendJson(res, 500, {
+          error: 'Could not commit rebalancing trade sequence',
           details: error?.message || 'Unknown error'
         });
       }

@@ -5729,82 +5729,65 @@
           throw new Error("Not enough credits for purchase.");
         }
 
-        const symbolsToResolve = [rebSelectedIsin.fullSymbol, buySelection.instrument.fullSymbol].filter(Boolean);
-        const { data: secRows, error: secErr } = await supabaseClient
-          .from("securities")
-          .select("id, symbol")
-          .in("symbol", symbolsToResolve);
-        if (secErr) throw new Error(secErr.message || "Failed to resolve security IDs.");
-
-        const secIdBySymbol = (secRows || []).reduce((acc, row) => {
-          acc[String(row.symbol)] = String(row.id);
-          return acc;
-        }, {});
-
-        const sellSecurityId = secIdBySymbol[rebSelectedIsin.fullSymbol] || null;
-        const buySecurityId = String(buySelection.instrument.id || secIdBySymbol[buySelection.instrument.fullSymbol] || "");
-        if (!sellSecurityId || !buySecurityId) {
-          throw new Error("Could not resolve sell/buy security IDs.");
-        }
-
         const deltas = new Map();
-        const pushDelta = (userId, securityId, qtyDelta) => {
-          const key = `${userId}|${securityId}`;
+        const pushDelta = (userId, symbol, qtyDelta) => {
+          const key = `${userId}|${symbol}`;
           deltas.set(key, (deltas.get(key) || 0) + Number(qtyDelta || 0));
         };
 
+        const sellSymbol = String(rebSelectedIsin.fullSymbol || "").trim();
+        const buySymbol = String(buySelection.instrument.fullSymbol || "").trim();
+        if (!sellSymbol || !buySymbol) {
+          throw new Error("Missing sell/buy instrument symbols.");
+        }
+
         clients.forEach((c) => {
           const sellQty = Number(rebSelectedStep.reductionUnits || 0) * Number(c.lots || 0);
-          if (sellQty > 0) pushDelta(String(c.id), sellSecurityId, -sellQty);
+          if (sellQty > 0) pushDelta(String(c.id), sellSymbol, -sellQty);
         });
 
         (buyExec.clientAllocations || []).forEach((alloc) => {
           const buyQty = Number(alloc.shares || 0);
-          if (buyQty > 0) pushDelta(String(alloc.clientId), buySecurityId, buyQty);
+          if (buyQty > 0) pushDelta(String(alloc.clientId), buySymbol, buyQty);
         });
 
-        const userIds = [...new Set([...clients.map((c) => String(c.id)), ...(buyExec.clientAllocations || []).map((a) => String(a.clientId))])];
-        const securityIds = [...new Set([sellSecurityId, buySecurityId])];
+        const payloadDeltas = [...deltas.entries()]
+          .map(([key, quantityDelta]) => {
+            const [userId, symbol] = key.split("|");
+            return { userId, symbol, quantityDelta };
+          })
+          .filter((row) => Number(row.quantityDelta) !== 0 && row.userId && row.symbol);
 
-        const { data: existingRows, error: existingErr } = await supabaseClient
-          .from("stock_holdings")
-          .select("id, user_id, security_id, quantity")
-          .eq("strategy_id", strategyId)
-          .in("user_id", userIds)
-          .in("security_id", securityIds);
-        if (existingErr) throw new Error(existingErr.message || "Failed to load existing holdings.");
+        if (!payloadDeltas.length) {
+          throw new Error("No valid trade updates to commit.");
+        }
 
-        const rowByKey = {};
-        (existingRows || []).forEach((row) => {
-          const key = `${row.user_id}|${row.security_id}`;
-          if (!rowByKey[key]) rowByKey[key] = row;
+        const { data: sessionData } = await supabaseClient.auth.getSession();
+        const accessToken = sessionData?.session?.access_token;
+        if (!accessToken) {
+          throw new Error("Session expired. Please sign in again.");
+        }
+
+        const commitRes = await fetch("/api/rebalancing/commit", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({
+            strategyId,
+            deltas: payloadDeltas,
+          }),
         });
 
-        const nowIso = new Date().toISOString();
-        for (const [key, delta] of deltas.entries()) {
-          if (!delta) continue;
-          const [userId, securityId] = key.split("|");
-          const existing = rowByKey[key];
-          if (existing) {
-            const currentQty = Number(existing.quantity || 0);
-            const nextQty = Math.max(0, currentQty + delta);
-            const { error: updateErr } = await supabaseClient
-              .from("stock_holdings")
-              .update({ quantity: nextQty, updated_at: nowIso })
-              .eq("id", existing.id);
-            if (updateErr) throw new Error(updateErr.message || "Failed to update holding row.");
-          } else if (delta > 0) {
-            const { error: insertErr } = await supabaseClient
-              .from("stock_holdings")
-              .insert({
-                user_id: userId,
-                security_id: securityId,
-                quantity: delta,
-                strategy_id: strategyId,
-                updated_at: nowIso,
-              });
-            if (insertErr) throw new Error(insertErr.message || "Failed to insert holding row.");
-          }
+        let commitJson = null;
+        try {
+          commitJson = await commitRes.json();
+        } catch {
+          commitJson = null;
+        }
+        if (!commitRes.ok || !commitJson?.ok) {
+          throw new Error(commitJson?.details || commitJson?.error || `Commit failed with status ${commitRes.status}`);
         }
 
         rebSelectedStrategyId = String(strategyId);
