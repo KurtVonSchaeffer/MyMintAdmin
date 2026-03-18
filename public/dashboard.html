@@ -5137,16 +5137,38 @@
             const { data: secRows } = await supabaseClient.from("securities").select("id, symbol").in("symbol", symbols);
             const codeBySecId = {};
             (secRows || []).forEach(s => { codeBySecId[s.id] = s.symbol.replace(/\.[A-Z]+$/, ""); });
+            const secIds = Object.keys(codeBySecId);
+            if (secIds.length) {
+              let holdingsQuery = supabaseClient
+                .from("stock_holdings")
+                .select("security_id, user_id, quantity, strategy_id")
+                .in("security_id", secIds);
 
-            /* Resolve user_id → display name */
-            const userIds = [...new Set(holdRows.filter(r => r.user_id).map(r => String(r.user_id)))];
-            let nameById = {};
-            if (userIds.length) {
-              const { data: profRows } = await supabaseClient.from("profiles").select("id, first_name, last_name, email").in("id", userIds);
-              nameById = (profRows || []).reduce((acc, p) => {
-                acc[String(p.id)] = [p.first_name, p.last_name].filter(Boolean).join(" ").trim() || p.email || String(p.id);
-                return acc;
-              }, {});
+              if (strategy?.id) {
+                holdingsQuery = holdingsQuery.eq("strategy_id", strategy.id);
+              }
+
+              const { data: holdRows } = await holdingsQuery;
+              const userIds = [...new Set((holdRows || []).filter(r => r.user_id).map(r => String(r.user_id)))];
+              let nameById = {};
+              if (userIds.length) {
+                const { data: profRows } = await supabaseClient.from("profiles").select("id, first_name, last_name, email").in("id", userIds);
+                nameById = (profRows || []).reduce((acc, p) => {
+                  acc[String(p.id)] = [p.first_name, p.last_name].filter(Boolean).join(" ").trim() || p.email || String(p.id);
+                  return acc;
+                }, {});
+              }
+              (holdRows || []).forEach(r => {
+                if (!r.user_id || !r.security_id) return;
+                if (strategy?.id && String(r.strategy_id) !== String(strategy.id)) return;
+                const code = codeBySecId[r.security_id];
+                if (!code) return;
+                if (!rebRawHoldings[code]) rebRawHoldings[code] = [];
+                const uid = String(r.user_id);
+                const existing = rebRawHoldings[code].find(x => x.userId === uid);
+                if (existing) { existing.quantity += Number(r.quantity) || 0; }
+                else { rebRawHoldings[code].push({ userId: uid, name: nameById[uid] || uid, quantity: Number(r.quantity) || 0 }); }
+              });
             }
 
             holdRows.forEach(r => {
