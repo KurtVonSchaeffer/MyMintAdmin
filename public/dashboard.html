@@ -974,7 +974,7 @@
           <!-- BUY MODAL -->
           <div id="rebBuyModal" class="hidden fixed inset-0 z-[9000] flex items-center justify-center p-4">
             <div class="absolute inset-0 bg-black/30" id="rebBuyOverlay"></div>
-            <div class="relative bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-lg z-10">
+            <div class="relative bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-3xl z-10">
               <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
                 <div>
                   <p class="font-semibold text-slate-900 text-sm">Buy Execution</p>
@@ -5046,6 +5046,8 @@
       let rebSelectedStep = null;
       let rebSellNetProceeds = 0;
       let rebApplyBuffer = true;
+      let rebBuySecuritiesCache = null;
+      let rebBuySecuritiesPromise = null;
 
       /* ── Helpers ── */
       const rebFmtZAR = n => `R\u00A0${Number(n).toLocaleString("en-ZA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -5086,6 +5088,54 @@
             totalCurrentHolding: c.totalCurrentHolding,
           }))
           .sort((a, b) => a.name.localeCompare(b.name));
+      }
+
+      async function rebLoadBuySecurities() {
+        if (rebBuySecuritiesCache) return rebBuySecuritiesCache;
+        if (rebBuySecuritiesPromise) return rebBuySecuritiesPromise;
+
+        rebBuySecuritiesPromise = (async () => {
+          const selectVariants = [
+            "id, symbol, name, logo_url, last_price",
+            "id, symbol, name, logo_url",
+            "id, symbol, name",
+          ];
+
+          let rows = [];
+          for (const cols of selectVariants) {
+            const res = await supabaseClient
+              .from("securities")
+              .select(cols)
+              .order("name", { ascending: true })
+              .limit(1000);
+            if (!res.error && Array.isArray(res.data)) {
+              rows = res.data;
+              break;
+            }
+          }
+
+          rebBuySecuritiesCache = (rows || []).map((s) => {
+            const rawSymbol = String(s.symbol || "");
+            const code = rawSymbol.replace(/\.[A-Z]+$/, "") || rawSymbol || "-";
+            const currentPrice = Number(s.last_price || 0) / 100;
+            return {
+              id: String(s.id || code),
+              code,
+              fullSymbol: rawSymbol,
+              description: s.name || code,
+              currentPrice: Number.isFinite(currentPrice) ? currentPrice : 0,
+              logoUrl: s.logo_url || "",
+            };
+          });
+
+          return rebBuySecuritiesCache;
+        })();
+
+        try {
+          return await rebBuySecuritiesPromise;
+        } finally {
+          rebBuySecuritiesPromise = null;
+        }
       }
 
       /* ── Init strategy selector ── */
@@ -5438,40 +5488,77 @@
       }
 
       /* ── Buy Modal ── */
-      function rebShowBuyModal(netCapital) {
+      async function rebShowBuyModal(netCapital) {
         const modal = document.getElementById("rebBuyModal");
         const metaEl = document.getElementById("rebBuyModalMeta");
         const body = document.getElementById("rebBuyModalBody");
         if (!modal || !body) return;
         if (metaEl) metaEl.textContent = `Net capital: ${rebFmtZAR(netCapital)}`;
 
-        if (!rebIsins.length) {
+        body.innerHTML = '<p class="text-xs text-slate-400 text-center py-4">Loading instruments...</p>';
+        modal.classList.remove("hidden");
+
+        const buyUniverse = await rebLoadBuySecurities();
+        if (!buyUniverse.length) {
           body.innerHTML = '<p class="text-xs text-slate-400 text-center py-4">No instruments available</p>';
-          modal.classList.remove("hidden");
           return;
         }
 
-        let selectedBuyIsin = null;
+        let selectedBuySecurityId = null;
+        let searchTerm = "";
         let applyBuffer = true;
 
         const render = () => {
+          const q = searchTerm.trim().toLowerCase();
+          const filtered = q
+            ? buyUniverse.filter((i) => {
+                const text = `${i.code} ${i.fullSymbol} ${i.description}`.toLowerCase();
+                return text.includes(q);
+              })
+            : buyUniverse;
+
+          const selectedInstrument = selectedBuySecurityId
+            ? buyUniverse.find(i => i.id === selectedBuySecurityId) || null
+            : null;
+
           body.innerHTML = `
             <div class="space-y-4">
               <div>
                 <label class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Instrument to Buy</label>
-                <select id="rebBuyIsinSelect" class="mt-1 w-full border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-400 bg-white">
-                  <option value="">Select instrument…</option>
-                  ${rebIsins.map(i => `<option value="${i.code}" ${selectedBuyIsin === i.code ? "selected" : ""}>${i.code} — ${i.description}${i.currentPrice > 0 ? ` (R${i.currentPrice.toLocaleString("en-ZA", { minimumFractionDigits: 2 })})` : ""}</option>`).join("")}
+                <input
+                  id="rebBuySearch"
+                  type="text"
+                  value="${searchTerm}"
+                  placeholder="Search by name or symbol..."
+                  class="mt-1 w-full border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-400 bg-white"
+                />
+                <select id="rebBuyIsinSelect" class="mt-2 w-full border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-400 bg-white">
+                  <option value="">${filtered.length ? `Select instrument (${filtered.length})...` : "No instruments match your search"}</option>
+                  ${filtered.map(i => `<option value="${i.id}" ${selectedBuySecurityId === i.id ? "selected" : ""}>${i.code} · ${i.description}${i.currentPrice > 0 ? ` · R ${i.currentPrice.toLocaleString("en-ZA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : " · N/A"}</option>`).join("")}
                 </select>
+                ${selectedInstrument ? `
+                  <div class="mt-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 flex items-center justify-between gap-3">
+                    <div class="flex items-center gap-3 min-w-0">
+                      <div class="w-8 h-8 rounded-lg border border-slate-200 bg-white overflow-hidden flex items-center justify-center flex-shrink-0">
+                        ${selectedInstrument.logoUrl ? `<img src="${selectedInstrument.logoUrl}" alt="${selectedInstrument.code}" class="w-full h-full object-contain" />` : `<span class="text-[10px] font-semibold text-slate-500">${selectedInstrument.code.slice(0, 2).toUpperCase()}</span>`}
+                      </div>
+                      <div class="min-w-0">
+                        <p class="text-xs font-semibold text-slate-900 truncate">${selectedInstrument.code} · ${selectedInstrument.description}</p>
+                        <p class="text-[10px] text-slate-400 truncate">${selectedInstrument.fullSymbol || selectedInstrument.code}</p>
+                      </div>
+                    </div>
+                    <span class="text-xs font-mono font-semibold text-slate-700">${selectedInstrument.currentPrice > 0 ? `R ${selectedInstrument.currentPrice.toLocaleString("en-ZA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "N/A"}</span>
+                  </div>
+                ` : ""}
               </div>
               <div class="flex items-center gap-2">
                 <input type="checkbox" id="rebBufferChk" ${applyBuffer ? "checked" : ""} class="rounded"/>
                 <label for="rebBufferChk" class="text-xs text-slate-600">Apply 8% buffer to price (conservative)</label>
               </div>
-              ${selectedBuyIsin ? (() => {
-                const isin = rebIsins.find(i => i.code === selectedBuyIsin);
-                if (!isin || isin.currentPrice <= 0) return '<p class="text-xs text-amber-600">No price available for this instrument.</p>';
-                const exec = rebComputeBuyExecution(isin.code, isin.description, isin.currentPrice, netCapital, rebClientsForIsin(rebSelectedIsin), applyBuffer);
+              ${selectedBuySecurityId ? (() => {
+                const instrument = buyUniverse.find(i => i.id === selectedBuySecurityId);
+                if (!instrument || instrument.currentPrice <= 0) return '<p class="text-xs text-amber-600">No price available for this instrument.</p>';
+                const exec = rebComputeBuyExecution(instrument.code, instrument.description, instrument.currentPrice, netCapital, rebClientsForIsin(rebSelectedIsin), applyBuffer);
                 return `<div class="bg-slate-50 rounded-xl p-4 space-y-2.5 text-sm border border-slate-100">
                   ${[
                     ["Buffered Price", rebFmtZAR(exec.bufferedPrice), false],
@@ -5497,8 +5584,15 @@
               })() : ""}
             </div>`;
 
-          const isinSel = body.querySelector("#rebBuyIsinSelect");
-          if (isinSel) isinSel.addEventListener("change", () => { selectedBuyIsin = isinSel.value || null; render(); });
+          const searchInput = body.querySelector("#rebBuySearch");
+          if (searchInput) searchInput.addEventListener("input", () => { searchTerm = searchInput.value || ""; render(); });
+
+          const isinSelect = body.querySelector("#rebBuyIsinSelect");
+          if (isinSelect) isinSelect.addEventListener("change", () => {
+            selectedBuySecurityId = isinSelect.value || null;
+            render();
+          });
+
           const bufChk = body.querySelector("#rebBufferChk");
           if (bufChk) bufChk.addEventListener("change", () => { applyBuffer = bufChk.checked; render(); });
         };
