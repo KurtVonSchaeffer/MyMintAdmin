@@ -957,7 +957,7 @@
                       <p id="rebImpactMeta" class="text-xs text-slate-400 mt-0.5">Select instrument + step</p>
                     </div>
                     <label class="inline-flex items-center gap-2 text-[11px] text-slate-500 font-semibold uppercase tracking-wider cursor-pointer select-none">
-                      <span>Show Change View</span>
+                      <span>Show Residual View</span>
                       <input id="rebImpactChangeToggle" type="checkbox" class="h-4 w-4 rounded border-slate-300 text-slate-700 focus:ring-slate-400" />
                     </label>
                   </div>
@@ -976,6 +976,9 @@
                         <tr><td colspan="5" class="px-4 py-8 text-center text-slate-400">No impact data yet</td></tr>
                       </tbody>
                     </table>
+                  </div>
+                  <div class="px-5 py-3 border-t border-slate-100 bg-white">
+                    <button id="rebUseResidualBtn" class="hidden w-full py-2.5 rounded-xl text-sm font-semibold text-white bg-violet-600 hover:bg-violet-700 transition shadow-sm">Use Residual</button>
                   </div>
                 </div>
               </div>
@@ -5438,6 +5441,15 @@
           .sort((a, b) => a.name.localeCompare(b.name));
       }
 
+      function rebResidualClientsForStrategy() {
+        return rebClientsForStrategy().map((client) => ({
+          id: String(client.id),
+          name: client.name,
+          // Use total strategy holding as proportional weight base for residual split.
+          lots: Math.max(1, Number(client.totalCurrentHolding) || 0),
+        }));
+      }
+
       async function rebLoadBuySecurities() {
         if (rebBuySecuritiesCache) return rebBuySecuritiesCache;
         if (rebBuySecuritiesPromise) return rebBuySecuritiesPromise;
@@ -5785,8 +5797,22 @@
       function rebRenderImpact() {
         const tbody = document.getElementById("rebImpactBody");
         const metaEl = document.getElementById("rebImpactMeta");
+        const useResidualBtn = document.getElementById("rebUseResidualBtn");
         const headerRow = tbody?.closest("table")?.querySelector("thead tr");
         if (!tbody) return;
+
+        const updateUseResidualButton = (visible, disabled = true) => {
+          if (!useResidualBtn) return;
+          if (visible) {
+            useResidualBtn.classList.remove("hidden");
+            useResidualBtn.disabled = !!disabled;
+            useResidualBtn.className = disabled
+              ? "w-full py-2.5 rounded-xl text-sm font-semibold text-violet-300 bg-violet-100 cursor-not-allowed"
+              : "w-full py-2.5 rounded-xl text-sm font-semibold text-white bg-violet-600 hover:bg-violet-700 transition shadow-sm";
+          } else {
+            useResidualBtn.classList.add("hidden");
+          }
+        };
 
         const setDefaultHeaders = () => {
           if (!headerRow) return;
@@ -5803,9 +5829,9 @@
           if (!headerRow) return;
           headerRow.innerHTML = `
             <th class="text-left px-4 py-2">Client</th>
-            <th class="text-right px-4 py-2">Lots</th>
+            <th class="text-right px-4 py-2">Weight Units</th>
             <th class="text-right px-4 py-2">Sold Shares</th>
-            <th class="text-right px-4 py-2">Net Change</th>
+            <th class="text-right px-4 py-2">Residual</th>
             <th class="text-right px-4 py-2">Stored Wallet</th>
             <th class="text-right px-4 py-2">Remaining to Use</th>
           `;
@@ -5813,9 +5839,13 @@
 
         if (!rebImpactChangeView) {
           setDefaultHeaders();
+          updateUseResidualButton(false);
+        } else {
+          updateUseResidualButton(true, !(rebSelectedIsin && rebSelectedStep));
         }
 
         const clients = rebClientsForIsin(rebSelectedIsin);
+        const residualClients = rebResidualClientsForStrategy();
         if (!rebSelectedIsin) {
           const strategyClients = rebClientsForStrategy();
           const colSpan = rebImpactChangeView ? 6 : 5;
@@ -5830,7 +5860,7 @@
           if (rebImpactChangeView) {
             setChangeHeaders();
             const totalWallet = strategyClients.reduce((sum, c) => sum + Number(rebWalletByClient[String(c.id)] || 0), 0);
-            if (metaEl) metaEl.textContent = `Change view · ${strategyClients.length} clients · wallet pool ${rebFmtZAR(totalWallet)}`;
+            if (metaEl) metaEl.textContent = `Residual view · ${strategyClients.length} clients · wallet pool ${rebFmtZAR(totalWallet)}`;
             tbody.innerHTML = strategyClients.map(client => {
               const wallet = Number(rebWalletByClient[String(client.id)] || 0);
               return `
@@ -5839,7 +5869,7 @@
                   <p class="font-medium text-slate-800">${client.name}</p>
                   <p class="text-[10px] text-slate-400 font-mono">${client.id}</p>
                 </td>
-                <td class="px-4 py-2.5 text-right font-mono tabular-nums text-slate-500">${client.instrumentCount}</td>
+                <td class="px-4 py-2.5 text-right font-mono tabular-nums text-slate-500">${Number(client.totalCurrentHolding || 0).toLocaleString()}</td>
                 <td class="px-4 py-2.5 text-right font-mono tabular-nums text-slate-400">—</td>
                 <td class="px-4 py-2.5 text-right font-mono tabular-nums text-slate-400">—</td>
                 <td class="px-4 py-2.5 text-right font-mono tabular-nums font-semibold text-slate-700">${rebFmtZAR(wallet)}</td>
@@ -5896,25 +5926,28 @@
           setChangeHeaders();
           const totalLots = clients.reduce((sum, c) => sum + (Number(c.lots) || 0), 0);
           const sellExec = rebComputeSellExecution(rebSelectedIsin, rebSelectedStep.reductionUnits, totalLots, clients.length);
-          const netByClient = rebDistributeMoneyByLots(sellExec.netProceeds, clients);
-          const totalChange = Object.values(netByClient).reduce((sum, v) => sum + Number(v || 0), 0);
-          const totalWallet = clients.reduce((sum, c) => sum + Number(rebWalletByClient[String(c.id)] || 0), 0);
-          const totalAvailable = clients.reduce((sum, c) => {
+          const residualByClient = rebDistributeMoneyByLots(sellExec.netProceeds, residualClients);
+          const totalResidual = Object.values(residualByClient).reduce((sum, v) => sum + Number(v || 0), 0);
+          const totalWallet = residualClients.reduce((sum, c) => sum + Number(rebWalletByClient[String(c.id)] || 0), 0);
+          const totalAvailable = residualClients.reduce((sum, c) => {
             const userId = String(c.id);
             const wallet = Number(rebWalletByClient[userId] || 0);
-            const change = Number(netByClient[userId] || 0);
-            return sum + wallet + change;
+            const residual = Number(residualByClient[userId] || 0);
+            return sum + wallet + residual;
           }, 0);
           if (metaEl) {
-            metaEl.textContent = `${rebSelectedIsin.code} · total change ${rebFmtZAR(totalChange)} · wallet ${rebFmtZAR(totalWallet)} · available ${rebFmtZAR(totalAvailable)}`;
+            metaEl.textContent = `${rebSelectedIsin.code} · total residual ${rebFmtZAR(totalResidual)} · wallet ${rebFmtZAR(totalWallet)} · available ${rebFmtZAR(totalAvailable)}`;
           }
 
-          tbody.innerHTML = clients.map((client) => {
+          tbody.innerHTML = residualClients.map((client) => {
             const userId = String(client.id);
-            const soldShares = rebSelectedStep.reductionUnits * (Number(client.lots) || 0);
-            const netChange = Number(netByClient[userId] || 0);
+            const soldQty = (rebRawHoldings[rebSelectedIsin.code] || [])
+              .filter((row) => String(row.userId) === userId)
+              .reduce((sum, row) => sum + (Number(row.quantity) || 0), 0);
+            const soldShares = Math.max(0, Math.round((Number(soldQty) || 0) * (Number(rebSelectedStep.reductionUnits || 0) / Math.max(1, Number(rebSelectedIsin.unitsPerLot || 1)))));
+            const residual = Number(residualByClient[userId] || 0);
             const wallet = Number(rebWalletByClient[userId] || 0);
-            const remaining = wallet + netChange;
+            const remaining = wallet + residual;
             return `
             <tr class="hover:bg-slate-50">
               <td class="px-4 py-2.5">
@@ -5923,7 +5956,7 @@
               </td>
               <td class="px-4 py-2.5 text-right font-mono tabular-nums text-slate-500">${client.lots}</td>
               <td class="px-4 py-2.5 text-right font-mono tabular-nums text-red-600">−${soldShares.toLocaleString()}</td>
-              <td class="px-4 py-2.5 text-right font-mono tabular-nums font-semibold text-green-700">+${rebFmtZAR(netChange)}</td>
+              <td class="px-4 py-2.5 text-right font-mono tabular-nums font-semibold text-green-700">+${rebFmtZAR(residual)}</td>
               <td class="px-4 py-2.5 text-right font-mono tabular-nums text-slate-700">${rebFmtZAR(wallet)}</td>
               <td class="px-4 py-2.5 text-right font-mono tabular-nums font-semibold text-violet-700">${rebFmtZAR(remaining)}</td>
             </tr>`;
@@ -6040,6 +6073,7 @@
 
         const render = () => {
           const clients = rebClientsForIsin(rebSelectedIsin);
+          const residualClients = rebResidualClientsForStrategy();
           const q = searchTerm.trim().toLowerCase();
           const filtered = q
             ? buyUniverse.filter((i) => {
@@ -6068,17 +6102,19 @@
             }
           }
 
-          const walletBeforeByClient = clients.reduce((acc, c) => {
+          const walletBeforeByClient = residualClients.reduce((acc, c) => {
             const userId = String(c.id);
             acc[userId] = rebRoundMoney(rebWalletByClient[userId] || 0);
             return acc;
           }, {});
 
-          const walletAfterMainByClient = clients.reduce((acc, c) => {
+          const residualSplitAfterMain = selectedExec
+            ? rebDistributeMoneyByLots(selectedExec.residualCash, residualClients)
+            : {};
+
+          const walletAfterMainByClient = residualClients.reduce((acc, c) => {
             const userId = String(c.id);
-            const mainResidual = selectedExec
-              ? Number((selectedExec.clientAllocations || []).find((a) => String(a.clientId) === userId)?.residualCash || 0)
-              : 0;
+            const mainResidual = Number(residualSplitAfterMain[userId] || 0);
             acc[userId] = rebRoundMoney(Number(walletBeforeByClient[userId] || 0) + mainResidual);
             return acc;
           }, {});
@@ -6097,7 +6133,7 @@
           if (useWalletForExtraBuy && selectedExec && selectedExtraInstrument && selectedExtraInstrument.currentPrice > 0) {
             selectedExtraExec = rebComputeWalletFundedBuyExecution({
               instrument: selectedExtraInstrument,
-              clients,
+              clients: residualClients,
               capitalByClient: walletAfterMainByClient,
               applyBuffer,
             });
@@ -6697,8 +6733,12 @@
           });
         }
 
-        clients.forEach((client) => {
-          const userId = String(client.id || "");
+        const walletParticipantIds = [...new Set([
+          ...Object.keys(walletBeforeByClient || {}),
+          ...Object.keys(walletAfterMainByClient || {}),
+          ...clients.map((client) => String(client.id || "")),
+        ])];
+        walletParticipantIds.forEach((userId) => {
           if (!userId) return;
           if (finalWalletByClient[userId] == null) {
             finalWalletByClient[userId] = rebRoundMoney(
@@ -6728,6 +6768,17 @@
           rebImpactToggle.addEventListener("change", () => {
             rebImpactChangeView = !!rebImpactToggle.checked;
             rebRenderImpact();
+          });
+        }
+
+        const rebUseResidualBtn = document.getElementById("rebUseResidualBtn");
+        if (rebUseResidualBtn) {
+          rebUseResidualBtn.addEventListener("click", () => {
+            if (!rebSelectedIsin || !rebSelectedStep) return;
+            const clients = rebClientsForIsin(rebSelectedIsin);
+            const totalLots = clients.reduce((sum, c) => sum + (Number(c.lots) || 0), 0);
+            const exec = rebComputeSellExecution(rebSelectedIsin, rebSelectedStep.reductionUnits, totalLots, clients.length);
+            rebShowBuyModal(exec.netProceeds);
           });
         }
 
