@@ -1213,18 +1213,20 @@
       let strategyInvestedIds = new Set();  // strategy IDs that have ≥1 real investor
 
       /* ── View-only mode for invested strategies ──────────────────────── */
-      const VIEW_ONLY_PASSWORD = "Mint@2024";   // change here to update password
       let strategyViewOnlyMode = false;
       let _strategyTabPwCallback = null;  // called after correct password
 
       const _strategyTabPwModal = document.getElementById("strategyTabPwModal");
       const _strategyTabPwInput = document.getElementById("strategyTabPwInput");
       const _strategyTabPwError = document.getElementById("strategyTabPwError");
+      const _strategyTabPwSubmitBtn = document.getElementById("strategyTabPwSubmit");
 
       const openStrategyTabPwModal = (onSuccess) => {
         _strategyTabPwCallback = onSuccess;
         _strategyTabPwInput.value = "";
         _strategyTabPwError.classList.add("hidden");
+        _strategyTabPwSubmitBtn.textContent = "View Strategy";
+        _strategyTabPwSubmitBtn.disabled = false;
         _strategyTabPwModal.classList.remove("hidden");
         setTimeout(() => _strategyTabPwInput.focus(), 80);
       };
@@ -1234,18 +1236,35 @@
         _strategyTabPwCallback = null;
       };
 
-      const submitStrategyTabPw = () => {
-        if (_strategyTabPwInput.value === VIEW_ONLY_PASSWORD) {
-          closeStrategyTabPwModal();
-          if (_strategyTabPwCallback) _strategyTabPwCallback();
-        } else {
+      const submitStrategyTabPw = async () => {
+        const password = _strategyTabPwInput.value;
+        if (!password) return;
+        _strategyTabPwSubmitBtn.textContent = "Verifying…";
+        _strategyTabPwSubmitBtn.disabled = true;
+        _strategyTabPwError.classList.add("hidden");
+        const { data: { user } } = await supabaseClient.auth.getUser();
+        if (!user) {
+          _strategyTabPwError.textContent = "Session expired. Please sign in again.";
           _strategyTabPwError.classList.remove("hidden");
+          _strategyTabPwSubmitBtn.textContent = "View Strategy";
+          _strategyTabPwSubmitBtn.disabled = false;
+          return;
+        }
+        const { error } = await supabaseClient.auth.signInWithPassword({ email: user.email, password });
+        if (error) {
+          _strategyTabPwError.textContent = "Incorrect password. Please try again.";
+          _strategyTabPwError.classList.remove("hidden");
+          _strategyTabPwSubmitBtn.textContent = "View Strategy";
+          _strategyTabPwSubmitBtn.disabled = false;
           _strategyTabPwInput.value = "";
           _strategyTabPwInput.focus();
+          return;
         }
+        closeStrategyTabPwModal();
+        if (_strategyTabPwCallback) _strategyTabPwCallback();
       };
 
-      document.getElementById("strategyTabPwSubmit").addEventListener("click", submitStrategyTabPw);
+      _strategyTabPwSubmitBtn.addEventListener("click", submitStrategyTabPw);
       document.getElementById("strategyTabPwCancel").addEventListener("click", closeStrategyTabPwModal);
       _strategyTabPwInput.addEventListener("keydown", (e) => { if (e.key === "Enter") submitStrategyTabPw(); });
       _strategyTabPwModal.addEventListener("click", (e) => { if (e.target === _strategyTabPwModal) closeStrategyTabPwModal(); });
