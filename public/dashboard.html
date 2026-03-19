@@ -956,6 +956,10 @@
                       <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Client Impact Preview</p>
                       <p id="rebImpactMeta" class="text-xs text-slate-400 mt-0.5">Select instrument + step</p>
                     </div>
+                    <label class="inline-flex items-center gap-2 text-[11px] text-slate-500 font-semibold uppercase tracking-wider cursor-pointer select-none">
+                      <span>Show Change View</span>
+                      <input id="rebImpactChangeToggle" type="checkbox" class="h-4 w-4 rounded border-slate-300 text-slate-700 focus:ring-slate-400" />
+                    </label>
                   </div>
                   <div class="flex-1 overflow-auto">
                     <table class="w-full text-xs">
@@ -5009,6 +5013,7 @@
       /* ── Constants ── */
       const REB_BROKERAGE_RATE = 0.005; // 0.5%
       const REB_OFF_CUSTODY_FEE = 69;   // R69
+      const REB_WALLET_TABLE = "strategy_client_wallet_credits";
 
       /* ── Engine functions ── */
       function rebGetDivisors(n) {
@@ -5059,17 +5064,323 @@
         const totalLots = clients.reduce((s, c) => s + c.lots, 0);
         const bufferedPrice = applyBuffer ? pricePerShare * 1.08 : pricePerShare;
         const buyPerLot = Math.floor(netCapital / (totalLots * bufferedPrice));
-        const totalShares = buyPerLot * totalLots;
+
+        const baseClientAllocations = clients.map((c) => ({
+          clientId: c.id,
+          clientName: c.name,
+          lots: c.lots,
+          shares: buyPerLot * c.lots,
+          extraShares: 0,
+        }));
+
+        const baseTotalShares = baseClientAllocations.reduce((sum, c) => sum + c.shares, 0);
+        const baseGrossCost = baseTotalShares * pricePerShare;
+        const baseBrokerage = baseGrossCost * REB_BROKERAGE_RATE;
+        const baseTotalCost = baseGrossCost + baseBrokerage + REB_OFF_CUSTODY_FEE;
+        const perShareTradingCost = pricePerShare * (1 + REB_BROKERAGE_RATE);
+        const remainingBudgetAfterBase = Math.max(0, netCapital - baseTotalCost);
+        const maxExtraShares = perShareTradingCost > 0
+          ? Math.floor(remainingBudgetAfterBase / perShareTradingCost)
+          : 0;
+
+        // Allocate extra shares by lot weight so client proportions remain aligned.
+        if (maxExtraShares > 0 && totalLots > 0) {
+          const weighted = baseClientAllocations.map((alloc) => {
+            const weight = alloc.lots / totalLots;
+            const targetExtra = maxExtraShares * weight;
+            return {
+              alloc,
+              floorExtra: Math.floor(targetExtra),
+              remainder: targetExtra - Math.floor(targetExtra),
+            };
+          });
+
+          let assigned = 0;
+          weighted.forEach((w) => {
+            w.alloc.extraShares = w.floorExtra;
+            assigned += w.floorExtra;
+          });
+
+          let remaining = maxExtraShares - assigned;
+          weighted
+            .sort((a, b) => {
+              if (b.remainder !== a.remainder) return b.remainder - a.remainder;
+              return String(a.alloc.clientId).localeCompare(String(b.alloc.clientId));
+            })
+            .forEach((w) => {
+              if (remaining <= 0) return;
+              w.alloc.extraShares += 1;
+              remaining -= 1;
+            });
+        }
+
+        const clientAllocations = baseClientAllocations.map((alloc) => {
+          const shares = alloc.shares + alloc.extraShares;
+          return {
+            clientId: alloc.clientId,
+            clientName: alloc.clientName,
+            lots: alloc.lots,
+            shares,
+            extraShares: alloc.extraShares,
+            residualCash: 0,
+          };
+        });
+
+        const totalShares = clientAllocations.reduce((sum, c) => sum + c.shares, 0);
         const grossCost = totalShares * pricePerShare;
         const brokerage = grossCost * REB_BROKERAGE_RATE;
         const totalCost = grossCost + brokerage + REB_OFF_CUSTODY_FEE;
         const residualCash = netCapital - totalCost;
-        const clientAllocations = clients.map(c => {
-          const shares = buyPerLot * c.lots;
-          const clientResidual = (c.lots / totalLots) * residualCash;
-          return { clientId: c.id, clientName: c.name, lots: c.lots, shares, residualCash: clientResidual };
+
+        clientAllocations.forEach((alloc) => {
+          const clientResidual = totalLots > 0 ? (alloc.lots / totalLots) * residualCash : 0;
+          alloc.residualCash = clientResidual;
         });
-        return { isinCode, isinDescription, pricePerShare, bufferedPrice, buyPerLot, totalShares, grossCost, brokerage, custodyFee: REB_OFF_CUSTODY_FEE, totalCost, residualCash, clientAllocations };
+
+        const extraSharesDistributed = clientAllocations.reduce((sum, c) => sum + c.extraShares, 0);
+
+        return {
+          isinCode,
+          isinDescription,
+          pricePerShare,
+          bufferedPrice,
+          buyPerLot,
+          totalShares,
+          grossCost,
+          brokerage,
+          custodyFee: REB_OFF_CUSTODY_FEE,
+          totalCost,
+          residualCash,
+          extraSharesDistributed,
+          clientAllocations,
+        };
+      }
+
+      function rebRoundMoney(value) {
+        return Number(Number(value || 0).toFixed(2));
+      }
+
+      function rebDistributeMoneyByLots(totalAmount, clients) {
+        const totalLots = clients.reduce((sum, c) => sum + (Number(c.lots) || 0), 0);
+        const totalCents = Math.max(0, Math.round(Number(totalAmount || 0) * 100));
+        if (!totalLots || !totalCents) {
+          return clients.reduce((acc, c) => {
+            acc[String(c.id)] = 0;
+            return acc;
+          }, {});
+        }
+
+        const weighted = clients.map((c) => {
+          const userId = String(c.id);
+          const lotWeight = (Number(c.lots) || 0) / totalLots;
+          const exactCents = totalCents * lotWeight;
+          const floorCents = Math.floor(exactCents);
+          return {
+            userId,
+            floorCents,
+            remainder: exactCents - floorCents,
+          };
+        });
+
+        let assigned = weighted.reduce((sum, item) => sum + item.floorCents, 0);
+        let remaining = totalCents - assigned;
+        weighted
+          .sort((a, b) => {
+            if (b.remainder !== a.remainder) return b.remainder - a.remainder;
+            return a.userId.localeCompare(b.userId);
+          })
+          .forEach((item) => {
+            if (remaining <= 0) return;
+            item.floorCents += 1;
+            remaining -= 1;
+          });
+
+        return weighted.reduce((acc, item) => {
+          acc[item.userId] = item.floorCents / 100;
+          return acc;
+        }, {});
+      }
+
+      function rebComputeWalletFundedBuyExecution({ instrument, clients, capitalByClient, applyBuffer }) {
+        const pricePerShare = Number(instrument?.currentPrice || 0);
+        if (!instrument || pricePerShare <= 0 || !Array.isArray(clients) || !clients.length) {
+          return null;
+        }
+
+        const clientBudgets = clients.map((c) => {
+          const userId = String(c.id);
+          const budget = Math.max(0, Number(capitalByClient?.[userId] || 0));
+          return {
+            clientId: userId,
+            clientName: c.name,
+            lots: Number(c.lots) || 0,
+            budget,
+            shares: 0,
+          };
+        });
+
+        const totalCapital = clientBudgets.reduce((sum, c) => sum + c.budget, 0);
+        const bufferedPrice = applyBuffer ? pricePerShare * 1.08 : pricePerShare;
+        const perShareBufferedCost = bufferedPrice * (1 + REB_BROKERAGE_RATE);
+        if (totalCapital <= REB_OFF_CUSTODY_FEE || perShareBufferedCost <= 0) {
+          return {
+            isinCode: instrument.code,
+            isinDescription: instrument.description,
+            pricePerShare,
+            bufferedPrice,
+            totalCapital,
+            totalShares: 0,
+            grossCost: 0,
+            brokerage: 0,
+            custodyFee: 0,
+            totalCost: 0,
+            residualCash: totalCapital,
+            clientAllocations: clientBudgets.map((c) => ({
+              clientId: c.clientId,
+              clientName: c.clientName,
+              lots: c.lots,
+              shares: 0,
+              spent: 0,
+              remainingCredits: c.budget,
+            })),
+          };
+        }
+
+        const maxShares = Math.floor((totalCapital - REB_OFF_CUSTODY_FEE) / perShareBufferedCost);
+        if (maxShares <= 0) {
+          return {
+            isinCode: instrument.code,
+            isinDescription: instrument.description,
+            pricePerShare,
+            bufferedPrice,
+            totalCapital,
+            totalShares: 0,
+            grossCost: 0,
+            brokerage: 0,
+            custodyFee: 0,
+            totalCost: 0,
+            residualCash: totalCapital,
+            clientAllocations: clientBudgets.map((c) => ({
+              clientId: c.clientId,
+              clientName: c.clientName,
+              lots: c.lots,
+              shares: 0,
+              spent: 0,
+              remainingCredits: c.budget,
+            })),
+          };
+        }
+
+        const totalLots = clientBudgets.reduce((sum, c) => sum + c.lots, 0);
+        const weightBase = totalLots > 0
+          ? clientBudgets.map((c) => ({ ...c, weight: c.lots / totalLots }))
+          : clientBudgets.map((c) => ({ ...c, weight: totalCapital > 0 ? c.budget / totalCapital : 0 }));
+
+        const weightedShares = weightBase.map((c) => {
+          const exact = maxShares * c.weight;
+          const floor = Math.floor(exact);
+          return {
+            ...c,
+            floor,
+            remainder: exact - floor,
+          };
+        });
+
+        let assigned = weightedShares.reduce((sum, c) => sum + c.floor, 0);
+        let remaining = maxShares - assigned;
+        weightedShares
+          .sort((a, b) => {
+            if (b.remainder !== a.remainder) return b.remainder - a.remainder;
+            return String(a.clientId).localeCompare(String(b.clientId));
+          })
+          .forEach((c) => {
+            if (remaining <= 0) return;
+            c.floor += 1;
+            remaining -= 1;
+          });
+
+        const totalShares = weightedShares.reduce((sum, c) => sum + c.floor, 0);
+        const grossCost = totalShares * pricePerShare;
+        const brokerage = grossCost * REB_BROKERAGE_RATE;
+        const custodyFee = totalShares > 0 ? REB_OFF_CUSTODY_FEE : 0;
+        const totalCost = grossCost + brokerage + custodyFee;
+        const residualCash = totalCapital - totalCost;
+
+        const perShareActualCost = pricePerShare * (1 + REB_BROKERAGE_RATE);
+        const custodyByClient = rebDistributeMoneyByLots(custodyFee, clients);
+        const clientAllocations = weightedShares.map((c) => {
+          const spent = (c.floor * perShareActualCost) + Number(custodyByClient[c.clientId] || 0);
+          return {
+            clientId: c.clientId,
+            clientName: c.clientName,
+            lots: c.lots,
+            shares: c.floor,
+            spent: rebRoundMoney(spent),
+            remainingCredits: rebRoundMoney(c.budget - spent),
+          };
+        });
+
+        return {
+          isinCode: instrument.code,
+          isinDescription: instrument.description,
+          pricePerShare,
+          bufferedPrice,
+          totalCapital,
+          totalShares,
+          grossCost,
+          brokerage,
+          custodyFee,
+          totalCost,
+          residualCash,
+          clientAllocations,
+        };
+      }
+
+      async function rebLoadWalletBalances(strategyId, userIds) {
+        const ids = [...new Set((userIds || []).map((id) => String(id)).filter(Boolean))];
+        if (!strategyId || !ids.length) return {};
+
+        try {
+          const { data, error } = await supabaseClient
+            .from(REB_WALLET_TABLE)
+            .select("user_id, balance")
+            .eq("strategy_id", strategyId)
+            .in("user_id", ids);
+
+          if (error) throw error;
+          return (data || []).reduce((acc, row) => {
+            const userId = String(row.user_id || "");
+            if (!userId) return acc;
+            acc[userId] = rebRoundMoney(row.balance || 0);
+            return acc;
+          }, {});
+        } catch (err) {
+          console.warn("rebLoadWalletBalances failed", err);
+          return {};
+        }
+      }
+
+      async function rebUpsertWalletBalances(strategyId, balancesByUser) {
+        const strategyKey = String(strategyId || "");
+        if (!strategyKey) return;
+        const rows = Object.entries(balancesByUser || {})
+          .map(([userId, balance]) => ({
+            strategy_id: strategyKey,
+            user_id: String(userId),
+            balance: rebRoundMoney(balance || 0),
+            updated_at: new Date().toISOString(),
+          }))
+          .filter((row) => row.user_id);
+
+        if (!rows.length) return;
+
+        const { error } = await supabaseClient
+          .from(REB_WALLET_TABLE)
+          .upsert(rows, { onConflict: "strategy_id,user_id" });
+
+        if (error) {
+          throw new Error(`${error.message || "Wallet balance update failed"}. Ensure SQL migration for ${REB_WALLET_TABLE} is applied.`);
+        }
       }
 
       /* ── State ── */
@@ -5083,6 +5394,8 @@
       let rebBuySecuritiesPromise = null;
       let rebShowUnitPrice = false; // false = show total value by default
       let rebSelectedStrategyId = null;
+      let rebWalletByClient = {};   // userId -> stored credits balance
+      let rebImpactChangeView = false;
 
       /* ── Helpers ── */
       const rebFmtZAR = n => `R\u00A0${Number(n).toLocaleString("en-ZA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -5193,6 +5506,7 @@
         rebSelectedIsin = null;
         rebSelectedStep = null;
         rebRawHoldings = {};
+        rebWalletByClient = {};
         rebSelectedStrategyId = strategyId ? String(strategyId) : null;
         const strategy = (allStrategiesFullData || []).find(s => String(s.id) === String(strategyId));
         if (!strategy) { rebIsins = []; rebRenderAll(); return; }
@@ -5250,6 +5564,7 @@
 
               const { data: holdRows } = await holdingsQuery;
               const userIds = [...new Set((holdRows || []).filter(r => r.user_id).map(r => String(r.user_id)))];
+              rebWalletByClient = await rebLoadWalletBalances(strategy.id, userIds);
               let nameById = {};
               if (userIds.length) {
                 const pickFirstNonEmpty = (...values) => {
@@ -5470,16 +5785,67 @@
       function rebRenderImpact() {
         const tbody = document.getElementById("rebImpactBody");
         const metaEl = document.getElementById("rebImpactMeta");
+        const headerRow = tbody?.closest("table")?.querySelector("thead tr");
         if (!tbody) return;
+
+        const setDefaultHeaders = () => {
+          if (!headerRow) return;
+          headerRow.innerHTML = `
+            <th class="text-left px-4 py-2">Client</th>
+            <th class="text-right px-4 py-2">Lots</th>
+            <th class="text-right px-4 py-2">Current</th>
+            <th class="text-right px-4 py-2">New</th>
+            <th class="text-right px-4 py-2">Δ</th>
+          `;
+        };
+
+        const setChangeHeaders = () => {
+          if (!headerRow) return;
+          headerRow.innerHTML = `
+            <th class="text-left px-4 py-2">Client</th>
+            <th class="text-right px-4 py-2">Lots</th>
+            <th class="text-right px-4 py-2">Sold Shares</th>
+            <th class="text-right px-4 py-2">Net Change</th>
+            <th class="text-right px-4 py-2">Stored Wallet</th>
+            <th class="text-right px-4 py-2">Remaining to Use</th>
+          `;
+        };
+
+        if (!rebImpactChangeView) {
+          setDefaultHeaders();
+        }
 
         const clients = rebClientsForIsin(rebSelectedIsin);
         if (!rebSelectedIsin) {
           const strategyClients = rebClientsForStrategy();
+          const colSpan = rebImpactChangeView ? 6 : 5;
           if (!strategyClients.length) {
-            tbody.innerHTML = `<tr><td colspan="5" class="px-4 py-8 text-center text-slate-400">${
+            tbody.innerHTML = `<tr><td colspan="${colSpan}" class="px-4 py-8 text-center text-slate-400">${
               rebIsins.length ? "No clients hold this strategy" : "Select a strategy"
             }</td></tr>`;
             if (metaEl) metaEl.textContent = rebIsins.length ? "No holders" : "Select strategy";
+            return;
+          }
+
+          if (rebImpactChangeView) {
+            setChangeHeaders();
+            const totalWallet = strategyClients.reduce((sum, c) => sum + Number(rebWalletByClient[String(c.id)] || 0), 0);
+            if (metaEl) metaEl.textContent = `Change view · ${strategyClients.length} clients · wallet pool ${rebFmtZAR(totalWallet)}`;
+            tbody.innerHTML = strategyClients.map(client => {
+              const wallet = Number(rebWalletByClient[String(client.id)] || 0);
+              return `
+              <tr class="hover:bg-slate-50">
+                <td class="px-4 py-2.5">
+                  <p class="font-medium text-slate-800">${client.name}</p>
+                  <p class="text-[10px] text-slate-400 font-mono">${client.id}</p>
+                </td>
+                <td class="px-4 py-2.5 text-right font-mono tabular-nums text-slate-500">${client.instrumentCount}</td>
+                <td class="px-4 py-2.5 text-right font-mono tabular-nums text-slate-400">—</td>
+                <td class="px-4 py-2.5 text-right font-mono tabular-nums text-slate-400">—</td>
+                <td class="px-4 py-2.5 text-right font-mono tabular-nums font-semibold text-slate-700">${rebFmtZAR(wallet)}</td>
+                <td class="px-4 py-2.5 text-right font-mono tabular-nums font-semibold text-violet-700">${rebFmtZAR(wallet)}</td>
+              </tr>`;
+            }).join("");
             return;
           }
 
@@ -5499,7 +5865,7 @@
         }
 
         if (!clients.length) {
-          tbody.innerHTML = `<tr><td colspan="5" class="px-4 py-8 text-center text-slate-400">${
+          tbody.innerHTML = `<tr><td colspan="${rebImpactChangeView ? 6 : 5}" class="px-4 py-8 text-center text-slate-400">${
             "No clients hold this instrument"
           }</td></tr>`;
           if (metaEl) metaEl.textContent = "No holders";
@@ -5522,6 +5888,45 @@
             <td class="px-4 py-2.5 text-right font-mono tabular-nums font-semibold text-slate-700">${currentHolding.toLocaleString()}</td>
             <td class="px-4 py-2.5 text-right font-mono tabular-nums font-semibold text-slate-400">0</td>
           </tr>`;
+          }).join("");
+          return;
+        }
+
+        if (rebImpactChangeView) {
+          setChangeHeaders();
+          const totalLots = clients.reduce((sum, c) => sum + (Number(c.lots) || 0), 0);
+          const sellExec = rebComputeSellExecution(rebSelectedIsin, rebSelectedStep.reductionUnits, totalLots, clients.length);
+          const netByClient = rebDistributeMoneyByLots(sellExec.netProceeds, clients);
+          const totalChange = Object.values(netByClient).reduce((sum, v) => sum + Number(v || 0), 0);
+          const totalWallet = clients.reduce((sum, c) => sum + Number(rebWalletByClient[String(c.id)] || 0), 0);
+          const totalAvailable = clients.reduce((sum, c) => {
+            const userId = String(c.id);
+            const wallet = Number(rebWalletByClient[userId] || 0);
+            const change = Number(netByClient[userId] || 0);
+            return sum + wallet + change;
+          }, 0);
+          if (metaEl) {
+            metaEl.textContent = `${rebSelectedIsin.code} · total change ${rebFmtZAR(totalChange)} · wallet ${rebFmtZAR(totalWallet)} · available ${rebFmtZAR(totalAvailable)}`;
+          }
+
+          tbody.innerHTML = clients.map((client) => {
+            const userId = String(client.id);
+            const soldShares = rebSelectedStep.reductionUnits * (Number(client.lots) || 0);
+            const netChange = Number(netByClient[userId] || 0);
+            const wallet = Number(rebWalletByClient[userId] || 0);
+            const remaining = wallet + netChange;
+            return `
+            <tr class="hover:bg-slate-50">
+              <td class="px-4 py-2.5">
+                <p class="font-medium text-slate-800">${client.name}</p>
+                <p class="text-[10px] text-slate-400 font-mono">${client.id}</p>
+              </td>
+              <td class="px-4 py-2.5 text-right font-mono tabular-nums text-slate-500">${client.lots}</td>
+              <td class="px-4 py-2.5 text-right font-mono tabular-nums text-red-600">−${soldShares.toLocaleString()}</td>
+              <td class="px-4 py-2.5 text-right font-mono tabular-nums font-semibold text-green-700">+${rebFmtZAR(netChange)}</td>
+              <td class="px-4 py-2.5 text-right font-mono tabular-nums text-slate-700">${rebFmtZAR(wallet)}</td>
+              <td class="px-4 py-2.5 text-right font-mono tabular-nums font-semibold text-violet-700">${rebFmtZAR(remaining)}</td>
+            </tr>`;
           }).join("");
           return;
         }
@@ -5629,8 +6034,12 @@
         let selectedBuySecurityId = null;
         let searchTerm = "";
         let applyBuffer = true;
+        let useWalletForExtraBuy = false;
+        let extraBuySearchTerm = "";
+        let selectedExtraSecurityId = null;
 
         const render = () => {
+          const clients = rebClientsForIsin(rebSelectedIsin);
           const q = searchTerm.trim().toLowerCase();
           const filtered = q
             ? buyUniverse.filter((i) => {
@@ -5653,10 +6062,45 @@
                 selectedInstrument.description,
                 selectedInstrument.currentPrice,
                 netCapital,
-                rebClientsForIsin(rebSelectedIsin),
+                clients,
                 applyBuffer,
               );
             }
+          }
+
+          const walletBeforeByClient = clients.reduce((acc, c) => {
+            const userId = String(c.id);
+            acc[userId] = rebRoundMoney(rebWalletByClient[userId] || 0);
+            return acc;
+          }, {});
+
+          const walletAfterMainByClient = clients.reduce((acc, c) => {
+            const userId = String(c.id);
+            const mainResidual = selectedExec
+              ? Number((selectedExec.clientAllocations || []).find((a) => String(a.clientId) === userId)?.residualCash || 0)
+              : 0;
+            acc[userId] = rebRoundMoney(Number(walletBeforeByClient[userId] || 0) + mainResidual);
+            return acc;
+          }, {});
+
+          const extraQ = extraBuySearchTerm.trim().toLowerCase();
+          const extraFiltered = extraQ
+            ? buyUniverse.filter((i) => {
+                const text = `${i.code} ${i.fullSymbol} ${i.description}`.toLowerCase();
+                return text.includes(extraQ);
+              })
+            : buyUniverse;
+          const selectedExtraInstrument = selectedExtraSecurityId
+            ? buyUniverse.find((i) => i.id === selectedExtraSecurityId) || null
+            : null;
+          let selectedExtraExec = null;
+          if (useWalletForExtraBuy && selectedExec && selectedExtraInstrument && selectedExtraInstrument.currentPrice > 0) {
+            selectedExtraExec = rebComputeWalletFundedBuyExecution({
+              instrument: selectedExtraInstrument,
+              clients,
+              capitalByClient: walletAfterMainByClient,
+              applyBuffer,
+            });
           }
 
           body.innerHTML = `
@@ -5693,12 +6137,41 @@
                 <input type="checkbox" id="rebBufferChk" ${applyBuffer ? "checked" : ""} class="rounded"/>
                 <label for="rebBufferChk" class="text-xs text-slate-600">Apply 8% buffer to price (conservative)</label>
               </div>
+              <div class="rounded-xl border border-slate-200 bg-white px-3 py-3 space-y-2">
+                <label class="flex items-center gap-2 text-xs text-slate-700">
+                  <input type="checkbox" id="rebUseWalletExtraChk" ${useWalletForExtraBuy ? "checked" : ""} class="rounded"/>
+                  <span class="font-semibold">Use remaining + stored wallet credits to buy another security</span>
+                </label>
+                ${selectedExec ? `<p class="text-[11px] text-slate-500">Wallet after main buy: ${rebFmtZAR(Object.values(walletAfterMainByClient).reduce((s, v) => s + Number(v || 0), 0))}</p>` : ""}
+                ${useWalletForExtraBuy ? `
+                  <div class="space-y-2">
+                    <input
+                      id="rebExtraBuySearch"
+                      type="text"
+                      value="${extraBuySearchTerm}"
+                      placeholder="Search second security..."
+                      class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-400 bg-white"
+                    />
+                    <select id="rebExtraBuyIsinSelect" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-400 bg-white">
+                      <option value="">${extraFiltered.length ? `Select second security (${extraFiltered.length})...` : "No instruments match your search"}</option>
+                      ${extraFiltered.map(i => `<option value="${i.id}" ${selectedExtraSecurityId === i.id ? "selected" : ""}>${i.code} · ${i.description}${i.currentPrice > 0 ? ` · R ${i.currentPrice.toLocaleString("en-ZA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : " · N/A"}</option>`).join("")}
+                    </select>
+                    ${selectedExtraExec ? `<div class="bg-slate-50 rounded-xl p-3 text-xs border border-slate-100 space-y-1.5">
+                      <div class="flex items-center justify-between"><span class="text-slate-500">Secondary Security</span><span class="font-mono text-slate-800">${selectedExtraExec.isinCode}</span></div>
+                      <div class="flex items-center justify-between"><span class="text-slate-500">Total Wallet Capital</span><span class="font-mono text-slate-800">${rebFmtZAR(selectedExtraExec.totalCapital)}</span></div>
+                      <div class="flex items-center justify-between"><span class="text-slate-500">Total Shares</span><span class="font-mono text-slate-800">${selectedExtraExec.totalShares.toLocaleString()}</span></div>
+                      <div class="flex items-center justify-between"><span class="text-slate-500">Residual after Secondary Buy</span><span class="font-mono text-violet-700">${rebFmtZAR(selectedExtraExec.residualCash)}</span></div>
+                    </div>` : `<p class="text-[11px] text-slate-400">Select a second security to spend wallet credits proportionally by holder weighting.</p>`}
+                  </div>
+                ` : ""}
+              </div>
               ${selectedBuySecurityId ? (() => {
                 if (!selectedExec) return selectedExecMessage || "";
                 return `<div class="bg-slate-50 rounded-xl p-4 space-y-2.5 text-sm border border-slate-100">
                   ${[
                     ["Buffered Price", rebFmtZAR(selectedExec.bufferedPrice), false],
                     ["Buy per Lot", selectedExec.buyPerLot.toLocaleString() + " shares", false],
+                    ["Extra Shares from Residual", (selectedExec.extraSharesDistributed || 0).toLocaleString(), false],
                     ["Total Shares", selectedExec.totalShares.toLocaleString(), false],
                     ["Gross Cost", rebFmtZAR(selectedExec.grossCost), false],
                     ["Brokerage", `−${rebFmtZAR(selectedExec.brokerage)}`, true],
@@ -5713,7 +6186,7 @@
                     <p class="text-xs font-semibold text-slate-500 mb-2">Per-Client Allocation</p>
                     ${selectedExec.clientAllocations.map(ca => `<div class="flex items-center justify-between mb-1">
                       <span class="text-xs text-slate-700">${ca.clientName}</span>
-                      <span class="font-mono text-xs">${ca.shares.toLocaleString()} shares · ${rebFmtZAR(ca.residualCash)} residual</span>
+                      <span class="font-mono text-xs">${ca.shares.toLocaleString()} shares${ca.extraShares > 0 ? ` (+${ca.extraShares} extra)` : ""} · ${rebFmtZAR(ca.residualCash)} residual</span>
                     </div>`).join("")}
                   </div>
                 </div>`;
@@ -5724,9 +6197,11 @@
           const buyResetBtn = document.getElementById("rebBuyResetBtn");
           if (buyCommitBtn) {
             const notEnoughCredits = !!selectedExec && Number(selectedExec.buyPerLot) === 0;
-            if (notEnoughCredits) {
+            const missingSecondarySelection = useWalletForExtraBuy && !selectedExtraSecurityId;
+            const commitDisabled = !selectedExec || notEnoughCredits || missingSecondarySelection;
+            if (commitDisabled) {
               buyCommitBtn.disabled = true;
-              buyCommitBtn.textContent = "Not enough credits";
+              buyCommitBtn.textContent = missingSecondarySelection ? "Select secondary buy" : "Not enough credits";
               buyCommitBtn.className = "flex-1 py-2 rounded-xl text-sm font-semibold bg-red-50 text-red-600 border border-red-200 cursor-not-allowed";
             } else {
               buyCommitBtn.disabled = false;
@@ -5750,11 +6225,22 @@
                     instrument: selectedInstrument,
                     exec: selectedExec,
                     strategyId: rebSelectedStrategyId,
+                    walletBeforeByClient,
+                    walletAfterMainByClient,
+                    extraBuy: (useWalletForExtraBuy && selectedExtraInstrument && selectedExtraExec)
+                      ? {
+                          instrument: selectedExtraInstrument,
+                          exec: selectedExtraExec,
+                        }
+                      : null,
                   }
                 : null;
               modal._onBack = () => {
                 selectedBuySecurityId = null;
                 searchTerm = "";
+                useWalletForExtraBuy = false;
+                extraBuySearchTerm = "";
+                selectedExtraSecurityId = null;
                 render();
               };
             }
@@ -5771,6 +6257,28 @@
 
           const bufChk = body.querySelector("#rebBufferChk");
           if (bufChk) bufChk.addEventListener("change", () => { applyBuffer = bufChk.checked; render(); });
+
+          const useWalletChk = body.querySelector("#rebUseWalletExtraChk");
+          if (useWalletChk) useWalletChk.addEventListener("change", () => {
+            useWalletForExtraBuy = !!useWalletChk.checked;
+            if (!useWalletForExtraBuy) {
+              extraBuySearchTerm = "";
+              selectedExtraSecurityId = null;
+            }
+            render();
+          });
+
+          const extraSearchInput = body.querySelector("#rebExtraBuySearch");
+          if (extraSearchInput) extraSearchInput.addEventListener("input", () => {
+            extraBuySearchTerm = extraSearchInput.value || "";
+            render();
+          });
+
+          const extraSelect = body.querySelector("#rebExtraBuyIsinSelect");
+          if (extraSelect) extraSelect.addEventListener("change", () => {
+            selectedExtraSecurityId = extraSelect.value || null;
+            render();
+          });
         };
 
         render();
@@ -5961,8 +6469,14 @@
         if (Number(buyExec.buyPerLot) <= 0) {
           throw new Error("Not enough credits for purchase.");
         }
+        const extraBuySelection = buySelection.extraBuy || null;
+        const extraBuyExec = extraBuySelection?.exec || null;
 
-        const symbolsToResolve = [rebSelectedIsin.fullSymbol, buySelection.instrument.fullSymbol].filter(Boolean);
+        const symbolsToResolve = [
+          rebSelectedIsin.fullSymbol,
+          buySelection.instrument.fullSymbol,
+          extraBuySelection?.instrument?.fullSymbol,
+        ].filter(Boolean);
         const { data: secRows, error: secErr } = await supabaseClient
           .from("securities")
           .select("id, symbol")
@@ -5976,8 +6490,17 @@
 
         const sellSecurityId = secIdBySymbol[rebSelectedIsin.fullSymbol] || null;
         const buySecurityId = String(buySelection.instrument.id || secIdBySymbol[buySelection.instrument.fullSymbol] || "");
+        const extraBuySecurityId = extraBuySelection
+          ? String(extraBuySelection.instrument.id || secIdBySymbol[extraBuySelection.instrument.fullSymbol] || "")
+          : "";
         if (!sellSecurityId || !buySecurityId) {
           throw new Error("Could not resolve sell/buy security IDs.");
+        }
+        if (extraBuySelection && !extraBuySecurityId) {
+          throw new Error("Could not resolve secondary buy security ID.");
+        }
+        if (extraBuySelection && String(extraBuySecurityId) === String(buySecurityId)) {
+          throw new Error("Secondary buy security must be different from the primary buy security.");
         }
 
         await rebReplaceStrategyHoldingAfterBuy({
@@ -5993,8 +6516,16 @@
         const strategyRef = (allStrategiesFullData || []).find((s) => String(s.id) === String(strategyId));
         const strategyNameSnapshot = strategyRef?.short_name || strategyRef?.name || "";
 
-        const userIds = [...new Set([...clients.map((c) => String(c.id)), ...(buyExec.clientAllocations || []).map((a) => String(a.clientId))])];
-        const securityIds = [...new Set([sellSecurityId, buySecurityId])];
+        const userIds = [...new Set([
+          ...clients.map((c) => String(c.id)),
+          ...(buyExec.clientAllocations || []).map((a) => String(a.clientId)),
+          ...(extraBuyExec?.clientAllocations || []).map((a) => String(a.clientId)),
+        ])];
+        const securityIds = [...new Set([
+          sellSecurityId,
+          buySecurityId,
+          ...(extraBuySecurityId ? [extraBuySecurityId] : []),
+        ])];
 
         const { data: existingRows, error: existingErr } = await supabaseClient
           .from("stock_holdings")
@@ -6076,54 +6607,107 @@
           if (buyEventErr) throw new Error(buyEventErr.message || "Failed to insert buy order events.");
         }
 
-        // Keep a live active BUY bucket per user for current holdings state.
-        const activeBuyRows = (existingRows || []).filter((row) => {
-          return String(row.security_id) === String(buySecurityId)
-            && Number(row.quantity || 0) >= 0;
-        });
-        const activeBuyByUserId = activeBuyRows.reduce((acc, row) => {
-          const userId = String(row.user_id || "");
-          if (!userId || acc[userId]) return acc;
-          acc[userId] = row;
-          return acc;
-        }, {});
-
-        for (const alloc of (buyExec.clientAllocations || [])) {
-          const userId = String(alloc.clientId || "");
-          const buyQty = Number(alloc.shares || 0);
-          if (!userId || buyQty <= 0) continue;
-
-          const existingBuy = activeBuyByUserId[userId];
-          if (existingBuy) {
-            const nextQty = Math.max(0, Number(existingBuy.quantity || 0) + buyQty);
-            const { error: updateErr } = await supabaseClient
+        if (extraBuyExec) {
+          const extraBuyEventRows = (extraBuyExec.clientAllocations || [])
+            .map((alloc) => ({
+              user_id: String(alloc.clientId),
+              security_id: extraBuySecurityId,
+              quantity: Number(alloc.shares || 0),
+              strategy_id: strategyId,
+              updated_at: nowIso,
+              trade_side: "BUY",
+              is_active: false,
+              closed_reason: "REBALANCE_EVENT_BUY_WALLET",
+              closed_at: nowIso,
+              rebalance_batch_id: rebalanceBatchId,
+              strategy_name_snapshot: strategyNameSnapshot,
+            }))
+            .filter((row) => row.quantity > 0);
+          if (extraBuyEventRows.length) {
+            const { error: extraBuyEventErr } = await supabaseClient
               .from("stock_holdings")
-              .update({
-                quantity: nextQty,
-                updated_at: nowIso,
-                trade_side: "BUY",
-                is_active: true,
-                strategy_name_snapshot: strategyNameSnapshot,
-              })
-              .eq("id", existingBuy.id);
-            if (updateErr) throw new Error(updateErr.message || "Failed to update active buy bucket.");
-          } else {
-            const { error: insertErr } = await supabaseClient
-              .from("stock_holdings")
-              .insert({
-                user_id: userId,
-                security_id: buySecurityId,
-                quantity: buyQty,
-                strategy_id: strategyId,
-                updated_at: nowIso,
-                trade_side: "BUY",
-                is_active: true,
-                rebalance_batch_id: rebalanceBatchId,
-                strategy_name_snapshot: strategyNameSnapshot,
-              });
-            if (insertErr) throw new Error(insertErr.message || "Failed to insert active buy bucket row.");
+              .insert(extraBuyEventRows);
+            if (extraBuyEventErr) throw new Error(extraBuyEventErr.message || "Failed to insert secondary buy order events.");
           }
         }
+
+        const applyActiveBuyAllocations = async (securityId, allocations) => {
+          const activeBuyRows = (existingRows || []).filter((row) => {
+            return String(row.security_id) === String(securityId)
+              && Number(row.quantity || 0) >= 0;
+          });
+          const activeBuyByUserId = activeBuyRows.reduce((acc, row) => {
+            const userId = String(row.user_id || "");
+            if (!userId || acc[userId]) return acc;
+            acc[userId] = row;
+            return acc;
+          }, {});
+
+          for (const alloc of (allocations || [])) {
+            const userId = String(alloc.clientId || "");
+            const buyQty = Number(alloc.shares || 0);
+            if (!userId || buyQty <= 0) continue;
+
+            const existingBuy = activeBuyByUserId[userId];
+            if (existingBuy) {
+              const nextQty = Math.max(0, Number(existingBuy.quantity || 0) + buyQty);
+              const { error: updateErr } = await supabaseClient
+                .from("stock_holdings")
+                .update({
+                  quantity: nextQty,
+                  updated_at: nowIso,
+                  trade_side: "BUY",
+                  is_active: true,
+                  strategy_name_snapshot: strategyNameSnapshot,
+                })
+                .eq("id", existingBuy.id);
+              if (updateErr) throw new Error(updateErr.message || "Failed to update active buy bucket.");
+            } else {
+              const { error: insertErr } = await supabaseClient
+                .from("stock_holdings")
+                .insert({
+                  user_id: userId,
+                  security_id: securityId,
+                  quantity: buyQty,
+                  strategy_id: strategyId,
+                  updated_at: nowIso,
+                  trade_side: "BUY",
+                  is_active: true,
+                  rebalance_batch_id: rebalanceBatchId,
+                  strategy_name_snapshot: strategyNameSnapshot,
+                });
+              if (insertErr) throw new Error(insertErr.message || "Failed to insert active buy bucket row.");
+            }
+          }
+        };
+
+        await applyActiveBuyAllocations(buySecurityId, buyExec.clientAllocations || []);
+        if (extraBuyExec) {
+          await applyActiveBuyAllocations(extraBuySecurityId, extraBuyExec.clientAllocations || []);
+        }
+
+        const walletBeforeByClient = buySelection.walletBeforeByClient || {};
+        const walletAfterMainByClient = buySelection.walletAfterMainByClient || {};
+        const finalWalletByClient = {};
+        if (extraBuyExec) {
+          (extraBuyExec.clientAllocations || []).forEach((alloc) => {
+            const userId = String(alloc.clientId || "");
+            if (!userId) return;
+            finalWalletByClient[userId] = rebRoundMoney(alloc.remainingCredits || 0);
+          });
+        }
+
+        clients.forEach((client) => {
+          const userId = String(client.id || "");
+          if (!userId) return;
+          if (finalWalletByClient[userId] == null) {
+            finalWalletByClient[userId] = rebRoundMoney(
+              walletAfterMainByClient[userId] ?? walletBeforeByClient[userId] ?? 0,
+            );
+          }
+        });
+        await rebUpsertWalletBalances(strategyId, finalWalletByClient);
+        rebWalletByClient = { ...rebWalletByClient, ...finalWalletByClient };
 
         rebSelectedStrategyId = String(strategyId);
         await rebLoadStrategy(strategyId);
@@ -6136,6 +6720,14 @@
           rebPriceHeader.addEventListener("click", () => {
             rebShowUnitPrice = !rebShowUnitPrice;
             rebRenderIsinsTable();
+          });
+        }
+
+        const rebImpactToggle = document.getElementById("rebImpactChangeToggle");
+        if (rebImpactToggle) {
+          rebImpactToggle.addEventListener("change", () => {
+            rebImpactChangeView = !!rebImpactToggle.checked;
+            rebRenderImpact();
           });
         }
 
