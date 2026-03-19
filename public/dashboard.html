@@ -4752,7 +4752,8 @@
           if (d === currentUnits) {
             steps.push({ divisor: d, newUnitsPerLot: 0, reductionUnits: currentUnits, reductionPercent: 100 });
           } else if (d > 0 && d < currentUnits) {
-            steps.push({ divisor: d, newUnitsPerLot: currentUnits - d, reductionUnits: d, reductionPercent: Math.round((d / currentUnits) * 100) });
+            // divisor d = the new lot size; reduction = currentUnits - d shares per lot being sold
+            steps.push({ divisor: d, newUnitsPerLot: d, reductionUnits: currentUnits - d, reductionPercent: Math.round(((currentUnits - d) / currentUnits) * 100) });
           }
         }
         return steps.sort((a, b) => a.reductionUnits - b.reductionUnits);
@@ -4802,20 +4803,21 @@
       let rebRawHoldings = {};     // code → [{userId, name, quantity}]
       let rebSelectedIsin = null;
       let rebSelectedStep = null;
-      let rebSellNetProceeds = 0;
-      let rebApplyBuffer = true;
+      // rebSellNetProceeds and rebApplyBuffer removed — both were unused module-level dead state
 
       /* ── Helpers ── */
       const rebFmtZAR = n => `R\u00A0${Number(n).toLocaleString("en-ZA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
       function rebClientsForIsin(isin) {
         if (!isin) return [];
         return (rebRawHoldings[isin.code] || [])
-          .filter(r => r.quantity > 0)
           .map(r => ({
             id: r.userId,
             name: r.name,
-            lots: Math.max(1, Math.round(r.quantity / isin.unitsPerLot)),
-          }));
+            // Use floor so a client with fewer shares than one full lot gets 0 lots
+            // (not inflated to 1) — then filter those out entirely
+            lots: Math.floor(r.quantity / isin.unitsPerLot),
+          }))
+          .filter(r => r.lots > 0);
       }
 
       /* ── Init strategy selector ── */
@@ -5127,7 +5129,16 @@
               ${selectedBuyIsin ? (() => {
                 const isin = rebIsins.find(i => i.code === selectedBuyIsin);
                 if (!isin || isin.currentPrice <= 0) return '<p class="text-xs text-amber-600">No price available for this instrument.</p>';
-                const exec = rebComputeBuyExecution(isin.code, isin.description, isin.currentPrice, netCapital, rebClientsForIsin(rebSelectedIsin), applyBuffer);
+                // Use the BUY instrument's own lot structure for client allocation,
+                // not the sell instrument's — each client's lot count is derived from
+                // how many of the buy instrument they currently hold (or 1 if none yet).
+                const buyClients = rebClientsForIsin(isin);
+                // Fallback: if no existing holders for buy instrument, distribute proportionally
+                // using sell-side clients with 1 lot each so capital still gets deployed.
+                const clientsForBuy = buyClients.length > 0
+                  ? buyClients
+                  : (rebClientsForIsin(rebSelectedIsin) || []).map(c => ({ ...c, lots: 1 }));
+                const exec = rebComputeBuyExecution(isin.code, isin.description, isin.currentPrice, netCapital, clientsForBuy, applyBuffer);
                 return `<div class="bg-slate-50 rounded-xl p-4 space-y-2.5 text-sm border border-slate-100">
                   ${[
                     ["Buffered Price", rebFmtZAR(exec.bufferedPrice), false],
