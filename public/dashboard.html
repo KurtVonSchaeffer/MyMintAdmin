@@ -5045,12 +5045,14 @@
         return { totalSharesDelta: reductionPerLot * totalLots, totalLots, deltaPerLot: reductionPerLot };
       }
 
-      function rebComputeSellExecution(isin, reductionPerLot, totalLots) {
+      function rebComputeSellExecution(isin, reductionPerLot, totalLots, affectedClientCount) {
         const totalShares = reductionPerLot * totalLots;
         const grossProceeds = totalShares * isin.currentPrice;
         const brokerage = grossProceeds * REB_BROKERAGE_RATE;
-        const netProceeds = grossProceeds - brokerage - REB_OFF_CUSTODY_FEE;
-        return { isinCode: isin.code, isinDescription: isin.description, totalShares, pricePerShare: isin.currentPrice, grossProceeds, brokerage, offCustodyFee: REB_OFF_CUSTODY_FEE, netProceeds };
+        const offCustodyFeeMultiplier = Math.max(1, Number(affectedClientCount) || 1);
+        const offCustodyFee = REB_OFF_CUSTODY_FEE * offCustodyFeeMultiplier;
+        const netProceeds = grossProceeds - brokerage - offCustodyFee;
+        return { isinCode: isin.code, isinDescription: isin.description, totalShares, pricePerShare: isin.currentPrice, grossProceeds, brokerage, offCustodyFee, offCustodyFeeMultiplier, netProceeds };
       }
 
       function rebComputeBuyExecution(isinCode, isinDescription, pricePerShare, netCapital, clients, applyBuffer) {
@@ -5250,11 +5252,77 @@
               const userIds = [...new Set((holdRows || []).filter(r => r.user_id).map(r => String(r.user_id)))];
               let nameById = {};
               if (userIds.length) {
+                const pickFirstNonEmpty = (...values) => {
+                  for (const value of values) {
+                    if (value == null) continue;
+                    const text = String(value).trim();
+                    if (text) return text;
+                  }
+                  return "";
+                };
+                const parsePackName = (packDetails) => {
+                  try {
+                    const pack = typeof packDetails === "string" ? JSON.parse(packDetails) : packDetails;
+                    if (!pack || typeof pack !== "object") return "";
+
+                    const info = pack.info || {};
+                    const fixedInfo = pack.fixedInfo || {};
+                    const personalDetails = pack.personalDetails || pack.personal_details || {};
+
+                    const firstName = pickFirstNonEmpty(
+                      info.firstNameEn,
+                      info.firstName,
+                      info.first_name,
+                      fixedInfo.firstNameEn,
+                      fixedInfo.firstName,
+                      fixedInfo.first_name,
+                      personalDetails.firstName,
+                      personalDetails.first_name,
+                      pack.firstName,
+                      pack.first_name,
+                    );
+                    const lastName = pickFirstNonEmpty(
+                      info.lastNameEn,
+                      info.lastName,
+                      info.last_name,
+                      fixedInfo.lastNameEn,
+                      fixedInfo.lastName,
+                      fixedInfo.last_name,
+                      personalDetails.lastName,
+                      personalDetails.last_name,
+                      pack.lastName,
+                      pack.last_name,
+                    );
+
+                    return [firstName, lastName].filter(Boolean).join(" ").trim();
+                  } catch {
+                    return "";
+                  }
+                };
+
                 const { data: profRows } = await supabaseClient.from("profiles").select("id, first_name, last_name, email").in("id", userIds);
                 nameById = (profRows || []).reduce((acc, p) => {
                   acc[String(p.id)] = [p.first_name, p.last_name].filter(Boolean).join(" ").trim() || p.email || String(p.id);
                   return acc;
                 }, {});
+
+                // Fallback to onboarding pack details for users whose profile name/email is not visible.
+                const missingNameUserIds = userIds.filter((id) => !nameById[id] || nameById[id] === id);
+                if (missingNameUserIds.length) {
+                  const { data: packRows } = await supabaseClient
+                    .from("user_onboarding_pack_details")
+                    .select("user_id, pack_details")
+                    .in("user_id", missingNameUserIds);
+
+                  (packRows || []).forEach((row) => {
+                    const userId = String(row?.user_id || "");
+                    if (!userId) return;
+                    const parsedName = parsePackName(row?.pack_details);
+                    if (parsedName) {
+                      nameById[userId] = parsedName;
+                    }
+                  });
+                }
               }
               (holdRows || []).forEach(r => {
                 if (!r.user_id || !r.security_id) return;
@@ -5511,7 +5579,7 @@
         if (!rebSelectedIsin || !rebSelectedStep) return;
         const clients = rebClientsForIsin(rebSelectedIsin);
         const totalLots = clients.reduce((s, c) => s + c.lots, 0);
-        const exec = rebComputeSellExecution(rebSelectedIsin, rebSelectedStep.reductionUnits, totalLots);
+        const exec = rebComputeSellExecution(rebSelectedIsin, rebSelectedStep.reductionUnits, totalLots, clients.length);
         const modal = document.getElementById("rebSellModal");
         const meta = document.getElementById("rebSellModalMeta");
         const body = document.getElementById("rebSellModalBody");
@@ -5525,7 +5593,7 @@
               ["Price per Share", rebFmtZAR(exec.pricePerShare), false],
               ["Gross Proceeds", rebFmtZAR(exec.grossProceeds), false],
               ["Brokerage (0.5%)", `−${rebFmtZAR(exec.brokerage)}`, true],
-              ["Off-Custody Fee", `−${rebFmtZAR(exec.offCustodyFee)}`, true],
+              [`Off-Custody Fee (x${exec.offCustodyFeeMultiplier})`, `−${rebFmtZAR(exec.offCustodyFee)}`, true],
             ].map(([label, val, isDeduct]) => `
               <div class="flex items-center justify-between text-sm">
                 <span class="text-slate-500">${label}</span>
