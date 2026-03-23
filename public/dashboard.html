@@ -5712,7 +5712,6 @@
       let rebRawHoldings = {};     // code → [{userId, name, quantity}]
       let rebSelectedIsin = null;
       let rebSelectedStep = null;
-<<<<<<< HEAD
       let rebSellNetProceeds = 0;
       let rebApplyBuffer = true;
       let rebBuySecuritiesCache = null;
@@ -5721,9 +5720,6 @@
       let rebSelectedStrategyId = null;
       let rebWalletByClient = {};   // userId -> stored credits balance
       let rebImpactChangeView = false;
-=======
-      // rebSellNetProceeds and rebApplyBuffer removed — both were unused module-level dead state
->>>>>>> fix/rebalancing-engine-bugs
 
       /* ── Helpers ── */
       const rebFmtZAR = n => `R\u00A0${Number(n).toLocaleString("en-ZA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -6489,7 +6485,6 @@
                 <input type="checkbox" id="rebBufferChk" ${applyBuffer ? "checked" : ""} class="rounded"/>
                 <label for="rebBufferChk" class="text-xs text-slate-600">Apply 8% buffer to price (conservative)</label>
               </div>
-<<<<<<< HEAD
               <div class="rounded-xl border border-slate-200 bg-white px-3 py-3 space-y-2">
                 <label class="flex items-center gap-2 text-xs text-slate-700">
                   <input type="checkbox" id="rebUseWalletExtraChk" ${useWalletForExtraBuy ? "checked" : ""} class="rounded"/>
@@ -6520,21 +6515,6 @@
               </div>
               ${selectedBuySecurityId ? (() => {
                 if (!selectedExec) return selectedExecMessage || "";
-=======
-              ${selectedBuyIsin ? (() => {
-                const isin = rebIsins.find(i => i.code === selectedBuyIsin);
-                if (!isin || isin.currentPrice <= 0) return '<p class="text-xs text-amber-600">No price available for this instrument.</p>';
-                // Use the BUY instrument's own lot structure for client allocation,
-                // not the sell instrument's — each client's lot count is derived from
-                // how many of the buy instrument they currently hold (or 1 if none yet).
-                const buyClients = rebClientsForIsin(isin);
-                // Fallback: if no existing holders for buy instrument, distribute proportionally
-                // using sell-side clients with 1 lot each so capital still gets deployed.
-                const clientsForBuy = buyClients.length > 0
-                  ? buyClients
-                  : (rebClientsForIsin(rebSelectedIsin) || []).map(c => ({ ...c, lots: 1 }));
-                const exec = rebComputeBuyExecution(isin.code, isin.description, isin.currentPrice, netCapital, clientsForBuy, applyBuffer);
->>>>>>> fix/rebalancing-engine-bugs
                 return `<div class="bg-slate-50 rounded-xl p-4 space-y-2.5 text-sm border border-slate-100">
                   ${[
                     ["Execution Price", rebFmtZAR(selectedExec.bufferedPrice), false],
