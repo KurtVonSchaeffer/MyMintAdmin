@@ -5385,22 +5385,24 @@
       let liveMarketValue = qty * currentPrice;
       if (!currentPrice && row.market_value) liveMarketValue = Number(row.market_value);
 
-      // Bottom value = unrealized_pnl / 100 (stored in cents), fall back to cost basis
-      let bottomValue = null;
-      if (row.unrealized_pnl !== null && row.unrealized_pnl !== undefined) {
+      // Bottom value = unrealized_pnl / 100, fall back to cost basis, then market value
+      let bottomValue;
+      if (row.unrealized_pnl !== null && row.unrealized_pnl !== undefined && Number(row.unrealized_pnl) !== 0) {
         bottomValue = Number(row.unrealized_pnl) / 100;
-      } else if (avgFill > 0) {
+      } else if (avgFill > 0 && qty > 0) {
         bottomValue = avgFill * qty;
+      } else {
+        bottomValue = liveMarketValue;
       }
 
       // Color: compare bottom vs black top (market value)
-      const isPositive = bottomValue !== null && liveMarketValue > 0 && bottomValue > liveMarketValue;
-      const isNegative = bottomValue !== null && liveMarketValue > 0 && bottomValue < liveMarketValue;
+      const isPositive = liveMarketValue > 0 && bottomValue > liveMarketValue;
+      const isNegative = liveMarketValue > 0 && bottomValue < liveMarketValue;
       const pnlColorClass = isNegative
         ? 'holding-change negative'
         : (isPositive ? 'holding-change' : 'holding-change neutral');
       const marketValue = liveMarketValue ? `R ${formatNumber(liveMarketValue, 2)}` : 'R -';
-      const pnl = bottomValue !== null
+      const pnl = liveMarketValue
         ? `${isPositive ? '+' : ''}R ${formatNumber(Math.abs(bottomValue), 2)}`
         : '-';
       const priceStr = currentPrice ? `R ${formatNumber(currentPrice, 2)}/share` : '';
@@ -5441,15 +5443,17 @@
         const qty = Number(row.quantity) || 0;
         const avgFill = row.avg_fill ? Number(row.avg_fill) : 0;
         const mv = currentPrice ? qty * currentPrice : (Number(row.market_value) || 0);
-        // Bottom = unrealized_pnl / 100, fall back to cost basis
-        let rowBottom = null;
-        if (row.unrealized_pnl !== null && row.unrealized_pnl !== undefined) {
+        // Bottom = unrealized_pnl / 100, fall back to cost basis, then market value
+        let rowBottom;
+        if (row.unrealized_pnl !== null && row.unrealized_pnl !== undefined && Number(row.unrealized_pnl) !== 0) {
           rowBottom = Number(row.unrealized_pnl) / 100;
-        } else if (avgFill > 0) {
+        } else if (avgFill > 0 && qty > 0) {
           rowBottom = avgFill * qty;
+        } else {
+          rowBottom = mv;
         }
         totalValue += mv;
-        totalBottomValue += (rowBottom || 0);
+        totalBottomValue += rowBottom;
       });
 
       // Color: compare total bottom vs total black top (market value)
@@ -5459,7 +5463,7 @@
         ? 'holding-change negative'
         : (isPositive ? 'holding-change' : 'holding-change neutral');
       const valueStr = totalValue ? `R ${formatNumber(totalValue, 2)}` : 'R -';
-      const pnlStr = totalBottomValue
+      const pnlStr = totalValue
         ? `${isPositive ? '+' : ''}R ${formatNumber(Math.abs(totalBottomValue), 2)}`
         : '-';
       const holdingCount = holdings.length;
