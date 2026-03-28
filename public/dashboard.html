@@ -758,6 +758,15 @@
 
               <!-- Heading + search (always visible) -->
               <div id="strategySearchSection" class="px-5 py-8 border-b border-slate-100 text-center">
+                <div style="display:flex;align-items:flex-start;justify-content:flex-end;margin-bottom:4px;">
+                  <button id="syncFundamentalsBtn" type="button"
+                    style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:10px;font-size:12px;font-weight:600;color:#64748b;cursor:pointer;transition:all 0.15s;"
+                    onmouseenter="this.style.background='#ede9fe';this.style.borderColor='#c4b5fd';this.style.color='#7c3aed'"
+                    onmouseleave="this.style.background='#f8fafc';this.style.borderColor='#e2e8f0';this.style.color='#64748b'">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                    Sync market data
+                  </button>
+                </div>
                 <h2 class="text-xl font-bold text-slate-900 mb-1">
                   Add stocks to your strategy
                 </h2>
@@ -5511,6 +5520,57 @@
             applyStrategiesFiltersAndRender(),
           );
       });
+
+      const syncFundamentalsBtn = document.getElementById('syncFundamentalsBtn');
+      if (syncFundamentalsBtn) {
+        syncFundamentalsBtn.addEventListener('click', async () => {
+          const session = supabaseClient.auth.session ? supabaseClient.auth.session() : (await supabaseClient.auth.getSession())?.data?.session;
+          const token = session?.access_token;
+          if (!token) { alert('You must be signed in to sync market data.'); return; }
+
+          const originalHTML = syncFundamentalsBtn.innerHTML;
+          syncFundamentalsBtn.disabled = true;
+          syncFundamentalsBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="animation:spin 1s linear infinite"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg> Syncing…`;
+          syncFundamentalsBtn.style.color = '#7c3aed';
+          syncFundamentalsBtn.style.borderColor = '#c4b5fd';
+          syncFundamentalsBtn.style.background = '#ede9fe';
+
+          try {
+            const res = await fetch('/api/securities/sync-fundamentals', {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data?.details || data?.error || 'Sync failed');
+            const errCount = (data.errors || []).length;
+            const msg = `Sync complete — ${data.updated} updated${errCount ? `, ${errCount} skipped` : ''}.`;
+            syncFundamentalsBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> ${msg}`;
+            syncFundamentalsBtn.style.color = '#16a34a';
+            syncFundamentalsBtn.style.borderColor = '#bbf7d0';
+            syncFundamentalsBtn.style.background = '#f0fdf4';
+            allSecuritiesCache = null;
+            setTimeout(() => {
+              syncFundamentalsBtn.disabled = false;
+              syncFundamentalsBtn.innerHTML = originalHTML;
+              syncFundamentalsBtn.style.color = '';
+              syncFundamentalsBtn.style.borderColor = '';
+              syncFundamentalsBtn.style.background = '';
+            }, 5000);
+          } catch (err) {
+            syncFundamentalsBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> ${err.message}`;
+            syncFundamentalsBtn.style.color = '#dc2626';
+            syncFundamentalsBtn.style.borderColor = '#fecaca';
+            syncFundamentalsBtn.style.background = '#fef2f2';
+            setTimeout(() => {
+              syncFundamentalsBtn.disabled = false;
+              syncFundamentalsBtn.innerHTML = originalHTML;
+              syncFundamentalsBtn.style.color = '';
+              syncFundamentalsBtn.style.borderColor = '';
+              syncFundamentalsBtn.style.background = '';
+            }, 5000);
+          }
+        });
+      }
 
       renderFormHoldings();
 

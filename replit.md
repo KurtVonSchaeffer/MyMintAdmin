@@ -42,7 +42,7 @@ Internal admin dashboard for the Mint investment platform. Provides client manag
 - Missing price data triggers a warning on save
 
 ## API Endpoints
-- `POST /api/securities/sync-fundamentals` — Pulls latest price, P/E, dividend, and YTD data from Yahoo Finance for all securities and writes them to the `securities` table. Requires admin Bearer token. Called from the "Sync market data" button in the Strategies tab.
+- `POST /api/securities/sync-fundamentals` — Pulls latest price, change%, P/E, market cap, dividend, and YTD data from Yahoo Finance for all active securities and writes them to the `securities` table. Requires admin Bearer token. Uses Yahoo Finance crumb auth. Called from the "Sync market data" button in the Strategies tab. Data units: last_price in ZAc (cents), change_percent/dividend_yield/ytd_performance as percentage floats, market_cap in ZAR (rand).
 
 ## Database Tables Used
 - `profiles` - Client profiles
