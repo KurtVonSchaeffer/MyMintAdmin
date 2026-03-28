@@ -32,63 +32,42 @@
       position: fixed;
       left: 0;
       top: 0;
-      width: 75px;
+      width: 220px;
       height: 100vh;
-      background: rgba(255, 255, 255, 0.86);
-      backdrop-filter: blur(8px);
-      border-right: 1px solid var(--border);
+      background: #ffffff;
+      border-right: 1px solid #ede9fe;
       display: flex;
       flex-direction: column;
-      align-items: center;
-      padding: 20px 0;
+      padding: 0;
       z-index: 1000;
+      overflow: hidden;
     }
-
-    .sidebar-logo {
-      width: 45px;
-      height: 45px;
-      border-radius: 12px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin-bottom: 40px;
-    }
-
-    .sidebar-nav {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      gap: 15px;
-      width: 100%;
-      padding: 0 15px;
-    }
-
-    .nav-icon {
-      width: 45px;
-      height: 45px;
-      border-radius: 12px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      text-decoration: none;
-      color: inherit;
-      transition: all 0.25s ease;
-    }
-
-    .nav-icon svg {
-      width: 22px;
-      height: 22px;
-      fill: #9ca3af;
-      transition: fill 0.25s ease;
-    }
-
-    .nav-icon:hover svg,
-    .nav-icon.active svg {
-      fill: #374151;
-    }
+    .sidebar-header { display: flex; align-items: center; gap: 10px; padding: 20px 20px 16px; border-bottom: 1px solid #f3f0ff; }
+    .sidebar-logo { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; cursor: pointer; }
+    .sidebar-brand { display: flex; flex-direction: column; }
+    .sidebar-brand-name { font-size: 14px; font-weight: 700; color: #0f172a; letter-spacing: -0.01em; line-height: 1.2; }
+    .sidebar-brand-sub { font-size: 10px; color: #94a3b8; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; }
+    .sidebar-nav { flex: 1; display: flex; flex-direction: column; gap: 2px; width: 100%; padding: 16px 12px; overflow-y: auto; }
+    .sidebar-section-label { font-size: 10px; font-weight: 600; color: #94a3b8; letter-spacing: 0.08em; text-transform: uppercase; padding: 8px 8px 4px; margin-top: 8px; }
+    .sidebar-section-label:first-child { margin-top: 0; }
+    .nav-icon { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 10px; cursor: pointer; transition: all 0.15s ease; text-decoration: none; color: #64748b; font-size: 13px; font-weight: 500; white-space: nowrap; }
+    .nav-icon svg { width: 18px; height: 18px; fill: #94a3b8; transition: fill 0.15s ease; flex-shrink: 0; }
+    .nav-icon:hover { background: #f5f3ff; color: #5b21b6; }
+    .nav-icon:hover svg { fill: #7c3aed; }
+    .nav-icon.active { background: #ede9fe; color: #5b21b6; font-weight: 600; }
+    .nav-icon.active svg { fill: #7c3aed; }
+    .sidebar-footer { border-top: 1px solid #f1f5f9; padding: 12px; }
+    .sidebar-user { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; margin-bottom: 4px; }
+    .sidebar-avatar { width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, #7c3aed, #a855f7); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: #fff; flex-shrink: 0; }
+    .sidebar-user-info { flex: 1; min-width: 0; }
+    .sidebar-user-name { font-size: 12px; font-weight: 600; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .sidebar-user-role { font-size: 10px; color: #94a3b8; font-weight: 500; }
+    .sidebar-signout { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 10px; cursor: pointer; color: #ef4444; font-size: 13px; font-weight: 500; transition: all 0.15s ease; border: none; background: none; width: 100%; text-align: left; }
+    .sidebar-signout svg { width: 18px; height: 18px; fill: #ef4444; flex-shrink: 0; }
+    .sidebar-signout:hover { background: #fef2f2; }
 
     .main-content {
-      margin-left: 75px;
+      margin-left: 220px;
       min-height: 100vh;
       display: flex;
       flex-direction: column;
@@ -824,35 +803,62 @@
 </head>
 <body>
   <aside class="sidebar">
-    <div class="sidebar-logo">
-      <img src="/icon.png" alt="App logo" style="width: 32px; height: 32px;" />
+    <div class="sidebar-header">
+      <div class="sidebar-logo">
+        <img src="/icon.png" alt="Mint logo" style="width:34px;height:34px;border-radius:8px;" />
+      </div>
+      <div class="sidebar-brand">
+        <span class="sidebar-brand-name">Mint</span>
+        <span class="sidebar-brand-sub">Admin Portal</span>
+      </div>
     </div>
 
     <nav class="sidebar-nav">
+      <span class="sidebar-section-label">Main</span>
+
       <a class="nav-icon" href="/dashboard.html" aria-label="Dashboard">
-        <svg viewBox="0 0 24 24">
-          <path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/>
-        </svg>
+        <svg viewBox="0 0 24 24"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>
+        Dashboard
       </a>
 
-      <a class="nav-icon" href="/index.html" aria-label="Profiles">
-        <svg viewBox="0 0 24 24">
-          <path d="M12 12c1.66 0 3-1.34 3-3S13.66 6 12 6 9 7.34 9 9s1.34 3 3 3zm0 2c-2.22 0-6 1.11-6 3.33V19h12v-1.67C18 15.11 14.22 14 12 14z"/>
-        </svg>
+      <a class="nav-icon" href="/index.html" aria-label="Clients">
+        <svg viewBox="0 0 24 24"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
+        Clients
       </a>
 
-      <a class="nav-icon active" href="/orderbook.html" aria-label="Orderbook">
-        <svg viewBox="0 0 24 24">
-          <path d="M4 5h16v2H4V5zm0 6h16v2H4v-2zm0 6h10v2H4v-2z"/>
-        </svg>
+      <span class="sidebar-section-label">Investments</span>
+
+      <a class="nav-icon" href="#" aria-label="EFT Payments">
+        <svg viewBox="0 0 24 24"><path d="M20 4H4c-1.11 0-2 .89-2 2v12c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V6c0-1.11-.89-2-2-2zm0 14H4v-6h16v6zm0-10H4V6h16v2z"/></svg>
+        EFT Payments
       </a>
+
+      <a class="nav-icon active" href="/orderbook.html" aria-label="Order Book">
+        <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 3c1.93 0 3.5 1.57 3.5 3.5S13.93 13 12 13s-3.5-1.57-3.5-3.5S10.07 6 12 6zm7 13H5v-.23c0-.62.28-1.2.76-1.58C7.47 15.82 9.64 15 12 15s4.53.82 6.24 2.19c.48.38.76.97.76 1.58V19z"/></svg>
+        Order Book
+      </a>
+
+      <span class="sidebar-section-label">System</span>
 
       <a class="nav-icon" href="#" aria-label="Settings">
-        <svg viewBox="0 0 24 24">
-          <path d="M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.06-.94l2.03-1.58c.18-.14.23-.41.12-.62l-1.92-3.32c-.11-.2-.36-.28-.58-.2l-2.39.96c-.5-.38-1.05-.7-1.66-.94l-.36-2.54A.488.488 0 0 0 14.9 2h-3.8c-.24 0-.44.17-.48.4l-.36 2.54c-.61.24-1.16.56-1.66.94l-2.39-.96a.5.5 0 0 0-.58.2L3.7 8.44c-.11.21-.06.48.12.62l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58a.5.5 0 0 0-.12.62l1.92 3.32c.11.2.36.28.58.2l2.39-.96c.5.38 1.05.7 1.66.94l.36 2.54c.04.23.24.4.48.4h3.8c.24 0 .44-.17.48-.4l.36-2.54c.61-.24 1.16-.56 1.66-.94l2.39.96c.22.08.47 0 .58-.2l1.92-3.32a.5.5 0 0 0-.12-.62l-2.03-1.58zM12 15.5c-1.93 0-3.5-1.57-3.5-3.5S10.07 8.5 12 8.5s3.5 1.57 3.5 3.5-1.57 3.5-3.5 3.5z"/>
-        </svg>
+        <svg viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.06-.94l2.03-1.58c.18-.14.23-.41.12-.62l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.62l2.03 1.58c-.05.32-.07.64-.07.94s.02.62.07.94l-2.03 1.58c-.18.14-.23.41-.12.62l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.62l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
+        Settings
       </a>
     </nav>
+
+    <div class="sidebar-footer">
+      <div class="sidebar-user">
+        <div class="sidebar-avatar" id="sidebarAvatarInitials">A</div>
+        <div class="sidebar-user-info">
+          <div class="sidebar-user-name" id="sidebarUserEmail">Admin</div>
+          <div class="sidebar-user-role">Administrator</div>
+        </div>
+      </div>
+      <button class="sidebar-signout" id="signOutBtn">
+        <svg viewBox="0 0 24 24"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5-5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/></svg>
+        Sign out
+      </button>
+    </div>
   </aside>
 
   <main class="main-content">
@@ -860,7 +866,6 @@
       <div class="top-search">
         <input id="orderbookSearch" type="search" placeholder="Search instrument, ticker, side, account, or broker ref..." aria-label="Search orderbook">
       </div>
-      <button class="signout-btn" id="signOutBtn">Sign out</button>
     </div>
 
     <section class="orderbook-wrap">
@@ -1028,6 +1033,15 @@
         window.location.href = '/signin.html';
       });
     }
+
+    (async () => {
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      const email = session?.user?.email || '';
+      const nameEl = document.getElementById('sidebarUserEmail');
+      const avatarEl = document.getElementById('sidebarAvatarInitials');
+      if (nameEl && email) nameEl.textContent = email;
+      if (avatarEl && email) avatarEl.textContent = email.charAt(0).toUpperCase();
+    })();
 
     const escapeHtml = (value) => String(value ?? '')
       .replace(/&/g, '&amp;')
