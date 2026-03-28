@@ -2372,6 +2372,7 @@
           const _r = await supabaseClient
             .from("securities")
             .select(_cols)
+            .eq("is_active", true)
             .order("name", { ascending: true })
             .limit(500);
           if (!_r.error && _r.data) { data = _r.data; break; }
