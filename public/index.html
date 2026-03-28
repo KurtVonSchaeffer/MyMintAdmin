@@ -8172,15 +8172,25 @@
       }
       window.__hideSkeleton = hideSkeleton;
       window.addEventListener('load', function() { setTimeout(hideSkeleton, 300); });
+      window.addEventListener('pagehide', function() {
+        h.style.transition = 'none';
+        h.style.opacity = '0';
+      });
+      window.addEventListener('pageshow', function(e) {
+        if (e.persisted) {
+          h.style.transition = 'opacity 0.2s ease';
+          h.style.opacity = '1';
+        }
+      });
       document.addEventListener('click', function(e) {
         var link = e.target.closest('a.nav-icon');
         if (!link) return;
         var href = link.getAttribute('href');
         if (!href || href === '#') return;
         e.preventDefault();
-        h.style.transition = 'opacity 0.15s ease';
+        h.style.transition = 'opacity 0.12s ease';
         h.style.opacity = '0';
-        setTimeout(function() { window.location.href = href; }, 150);
+        setTimeout(function() { window.location.href = href; }, 120);
       });
     })();
   </script>
