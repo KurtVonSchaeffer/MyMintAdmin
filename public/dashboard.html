@@ -3881,7 +3881,7 @@
 
         let html = '';
         html += `<div style="${itemStyle}color:#2563eb;font-weight:600;" onmouseover="this.style.background='#eff6ff'" onmouseout="this.style.background=''"
-          onclick="document.getElementById('ovStratPanel').style.display='none';document.getElementById('tabOverview')?.click();const _sp=document.getElementById('tabStrategiesPanel');if(_sp)_sp.style.display='block';const _sc=document.getElementById('ovStratContent');if(_sc)_sc.style.display='none';setTimeout(()=>document.getElementById('newStrategyTabBtn')?.click(),120);">
+          onclick="window.ovPromptNewStrategy()">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 4v16m8-8H4"/></svg>
           Add New Strategy
         </div>`;
@@ -3928,12 +3928,9 @@
         window.__dbgBreadcrumb('initOverview:done');
       };
 
-      window.ovSelectStrategy = async (val) => {
+      const _doOvSelectStrategy = async (idx, strat) => {
         try {
-        window.__dbgBreadcrumb('ovSelect:start val=' + val);
-        const idx = Number(val) || 0;
-        const strat = _ovAllStrategies[idx];
-        if (!strat) { window.__dbgBreadcrumb('ovSelect:no-strat'); return; }
+        window.__dbgBreadcrumb('ovSelect:start val=' + idx);
         const sel = document.getElementById('ovStratSel');
         if (sel) sel.value = String(idx);
         const btnLabel = document.getElementById('ovStratBtnLabel');
@@ -4012,6 +4009,92 @@
           window.__dbgBreadcrumb('ovSelect:CAUGHT-ERROR:' + (err?.message || String(err)));
           console.error('[Overview] strategy render error:', err);
         }
+      };
+
+      window.ovSelectStrategy = async (val) => {
+        const idx = Number(val) || 0;
+        const strat = _ovAllStrategies[idx];
+        if (!strat) { window.__dbgBreadcrumb('ovSelect:no-strat'); return; }
+        if (strategyInvestedIds.has(String(strat.id))) {
+          openStrategyTabPwModal(() => _doOvSelectStrategy(idx, strat));
+        } else {
+          await _doOvSelectStrategy(idx, strat);
+        }
+      };
+
+      window.ovPromptNewStrategy = () => {
+        const panel = document.getElementById('ovStratPanel');
+        if (!panel) return;
+        panel.style.display = 'block';
+        panel.innerHTML = `
+          <div style="padding:14px 14px 12px;">
+            <p style="font-size:10.5px;font-weight:700;color:#64748b;letter-spacing:0.07em;text-transform:uppercase;margin:0 0 8px;">Strategy Name</p>
+            <input id="_ovNewStratNameInput" type="text" placeholder="e.g. Growth Portfolio"
+              style="width:100%;border:1.5px solid #e2e8f0;border-radius:7px;padding:7px 10px;font-size:13px;color:#0f172a;outline:none;box-sizing:border-box;transition:border-color 0.15s;" />
+            <p id="_ovNewStratErr" style="display:none;font-size:11px;color:#dc2626;margin:4px 0 0;"></p>
+            <div style="display:flex;gap:6px;margin-top:10px;">
+              <button id="_ovNewStratConfirm" onclick="window.ovConfirmNewStrategy()"
+                style="flex:1;padding:7px;background:#2563eb;color:#fff;border:none;border-radius:7px;font-size:12.5px;font-weight:600;cursor:pointer;">
+                Create
+              </button>
+              <button onclick="document.getElementById('ovStratPanel').style.display='none'"
+                style="padding:7px 12px;background:#f1f5f9;color:#64748b;border:none;border-radius:7px;font-size:12.5px;cursor:pointer;">
+                Cancel
+              </button>
+            </div>
+          </div>`;
+        const inp = document.getElementById('_ovNewStratNameInput');
+        if (inp) {
+          inp.focus();
+          inp.style.borderColor = '#2563eb';
+          inp.addEventListener('focus', () => inp.style.borderColor = '#2563eb');
+          inp.addEventListener('blur',  () => inp.style.borderColor = '#e2e8f0');
+          inp.addEventListener('keydown', e => {
+            if (e.key === 'Enter') { e.preventDefault(); window.ovConfirmNewStrategy(); }
+            if (e.key === 'Escape') document.getElementById('ovStratPanel').style.display = 'none';
+          });
+        }
+      };
+
+      window.ovConfirmNewStrategy = async () => {
+        const inp = document.getElementById('_ovNewStratNameInput');
+        const errEl = document.getElementById('_ovNewStratErr');
+        const btn = document.getElementById('_ovNewStratConfirm');
+        if (!inp) return;
+        const name = inp.value.trim();
+        if (!name) {
+          if (errEl) { errEl.textContent = 'Please enter a strategy name.'; errEl.style.display = 'block'; }
+          inp.focus();
+          return;
+        }
+        if (btn) { btn.textContent = 'Creating…'; btn.disabled = true; }
+        document.getElementById('ovStratPanel').style.display = 'none';
+        const { data: insertData, error } = await supabaseClient
+          .from('strategies')
+          .insert([{ name, slug: createStrategySlug(name), status: 'active', is_public: false, is_featured: false }])
+          .select('id')
+          .single();
+        if (error || !insertData?.id) {
+          console.error('[ovConfirmNewStrategy] failed:', error);
+          if (btn) { btn.textContent = 'Create'; btn.disabled = false; }
+          return;
+        }
+        activeStrategyTabId = insertData.id;
+        const hiddenName = document.getElementById('strategyName');
+        if (hiddenName) hiddenName.value = name;
+        const sp = document.getElementById('tabStrategiesPanel');
+        if (sp) sp.style.display = 'block';
+        const sc = document.getElementById('ovStratContent');
+        if (sc) sc.style.display = 'none';
+        setStrategyWorkspaceVisible(true);
+        await loadStrategies();
+        const saved = (allStrategiesFullData || []).find(s => s.id === activeStrategyTabId);
+        if (saved) {
+          setStrategyWorkspaceVisible(true);
+          await editStrategy(saved, globalSecuritiesMap);
+        }
+        const btnLabel = document.getElementById('ovStratBtnLabel');
+        if (btnLabel) btnLabel.textContent = name;
       };
 
       const ovRenderTitleBar = (strat, analytics, aum, investorCount) => {
