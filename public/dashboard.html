@@ -3853,7 +3853,12 @@
         const panel = document.getElementById('ovStratPanel');
         if (!panel) return;
         const isOpen = panel.style.display !== 'none';
-        panel.style.display = isOpen ? 'none' : 'block';
+        if (isOpen) {
+          panel.style.display = 'none';
+        } else {
+          ovBuildStratDrop();
+          panel.style.display = 'block';
+        }
       };
 
       window.ovBuildStratDrop = () => {
