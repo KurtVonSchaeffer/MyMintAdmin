@@ -26,6 +26,25 @@
       @keyframes ov-ticker-scroll { 0%{transform:translateX(0)} 100%{transform:translateX(-50%)} }
       .ov-ticker-anim { animation: ov-ticker-scroll 300s linear infinite; }
       .ov-ticker-anim:hover { animation-play-state: paused; }
+      @keyframes strat-drop-in { from { opacity:0; transform:translateY(-10px) scale(0.96); } to { opacity:1; transform:translateY(0) scale(1); } }
+      @keyframes strat-drop-out { from { opacity:1; transform:translateY(0) scale(1); } to { opacity:0; transform:translateY(-6px) scale(0.96); } }
+      @keyframes strat-item-in { from { opacity:0; transform:translateX(-5px); } to { opacity:1; transform:translateX(0); } }
+      .strat-drop-open { animation: strat-drop-in 0.2s cubic-bezier(0.16,1,0.3,1) forwards; }
+      .strat-drop-close { animation: strat-drop-out 0.15s ease forwards; }
+      #ovStratBtn { transition: border-color 0.15s, box-shadow 0.15s, background 0.15s; }
+      #ovStratBtn:hover { border-color:#a5b4fc; box-shadow:0 0 0 3px rgba(99,102,241,0.08); }
+      #ovStratBtn.strat-open { border-color:#6366f1; box-shadow:0 0 0 3px rgba(99,102,241,0.12); background:#fafaff; }
+      #ovStratBtn .strat-chevron { transition: transform 0.22s cubic-bezier(0.16,1,0.3,1); color:#94a3b8; }
+      #ovStratBtn.strat-open .strat-chevron { transform: rotate(180deg); color:#6366f1; }
+      #ovStratBtn .strat-btn-dot { width:8px;height:8px;border-radius:50%;flex-shrink:0; }
+      .strat-drop-item { display:flex;align-items:center;gap:9px;padding:8px 14px;cursor:pointer;font-size:13px;color:#0f172a;transition:background 0.12s,color 0.12s;border-radius:7px;margin:0 6px; }
+      .strat-drop-item:hover { background:#f1f5f9; }
+      .strat-drop-item.selected { background:#eef2ff;color:#4f46e5;font-weight:600; }
+      .strat-drop-header { padding:6px 14px 2px;font-size:10px;font-weight:700;letter-spacing:0.09em;text-transform:uppercase;color:#94a3b8; }
+      .strat-drop-sep { height:1px;background:#f1f5f9;margin:5px 6px; }
+      .strat-drop-dots { flex-shrink:0;width:24px;height:24px;display:flex;align-items:center;justify-content:center;border:none;background:none;border-radius:6px;cursor:pointer;padding:0;opacity:0;transition:opacity 0.12s,background 0.12s; }
+      .strat-drop-dots:hover { background:#e2e8f0; }
+      .strat-drop-item:hover .strat-drop-dots { opacity:1; }
       .ov-kpi-card { background:white;border-radius:10px;padding:10px 12px;box-shadow:0 0 0 1px rgba(0,0,0,0.05),0 1px 3px rgba(0,0,0,0.05); }
       .ov-table { width:100%;border-collapse:collapse;font-size:12px; }
       .ov-table th { text-align:left;padding:6px 8px;font-size:11px;font-weight:500;color:#94a3b8;border-bottom:1px solid #f1f5f9; }
@@ -649,11 +668,14 @@
         <div class="top-nav-right">
           <!-- Custom strategy dropdown -->
           <div id="ovStratDropWrapper" style="position:relative;flex-shrink:0;">
-            <button id="ovStratBtn" onclick="window.ovToggleStratDrop(event)" style="display:flex;align-items:center;gap:8px;height:32px;padding:0 10px 0 12px;border:1px solid #e2e8f0;border-radius:8px;background:#fff;color:#0f172a;cursor:pointer;font-size:12px;font-weight:500;min-width:200px;max-width:280px;justify-content:space-between;white-space:nowrap;outline:none;">
-              <span id="ovStratBtnLabel" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;text-align:left;">Select strategy</span>
-              <svg width="10" height="6" viewBox="0 0 10 6" fill="none" style="flex-shrink:0;"><path d="M1 1l4 4 4-4" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round"/></svg>
+            <button id="ovStratBtn" onclick="window.ovToggleStratDrop(event)" style="display:flex;align-items:center;gap:10px;height:38px;padding:0 12px 0 14px;border:1.5px solid #e2e8f0;border-radius:10px;background:#fff;color:#0f172a;cursor:pointer;font-size:13px;font-weight:500;min-width:220px;max-width:300px;justify-content:space-between;white-space:nowrap;outline:none;">
+              <div style="display:flex;align-items:center;gap:8px;overflow:hidden;flex:1;">
+                <span id="ovStratBtnDot" class="strat-btn-dot" style="background:#e2e8f0;display:none;"></span>
+                <span id="ovStratBtnLabel" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;text-align:left;color:#64748b;">Select strategy</span>
+              </div>
+              <svg class="strat-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><polyline points="6 9 12 15 18 9"/></svg>
             </button>
-            <div id="ovStratPanel" style="display:none;position:absolute;top:38px;right:0;z-index:3000;background:white;border:1px solid #e2e8f0;border-radius:12px;box-shadow:0 8px 28px rgba(0,0,0,0.12);min-width:260px;max-height:380px;overflow-y:auto;padding:6px 0;"></div>
+            <div id="ovStratPanel" style="display:none;position:absolute;top:46px;right:0;z-index:3000;background:white;border:1.5px solid #e8eaf0;border-radius:14px;box-shadow:0 12px 40px rgba(15,23,42,0.14),0 2px 8px rgba(15,23,42,0.06);min-width:280px;max-height:400px;overflow-y:auto;padding:8px 0;"></div>
           </div>
           <!-- Hidden select kept for JS compat -->
           <select id="ovStratSel" style="display:none;" onchange="window.ovSelectStrategy(this.value)"></select>
@@ -3896,16 +3918,34 @@
       };
 
       /* ── Custom strategy dropdown helpers ── */
+      const _ovClosePanel = () => {
+        const panel = document.getElementById('ovStratPanel');
+        const btn   = document.getElementById('ovStratBtn');
+        if (!panel || panel.style.display === 'none') return;
+        panel.classList.remove('strat-drop-open');
+        panel.classList.add('strat-drop-close');
+        if (btn) btn.classList.remove('strat-open');
+        setTimeout(() => {
+          panel.style.display = 'none';
+          panel.classList.remove('strat-drop-close');
+        }, 150);
+      };
+
       window.ovToggleStratDrop = (e) => {
         if (e) e.stopPropagation();
         const panel = document.getElementById('ovStratPanel');
+        const btn   = document.getElementById('ovStratBtn');
         if (!panel) return;
         const isOpen = panel.style.display !== 'none';
         if (isOpen) {
-          panel.style.display = 'none';
+          _ovClosePanel();
         } else {
           ovBuildStratDrop();
           panel.style.display = 'block';
+          panel.classList.remove('strat-drop-close');
+          void panel.offsetWidth; /* force reflow so animation triggers */
+          panel.classList.add('strat-drop-open');
+          if (btn) btn.classList.add('strat-open');
         }
       };
 
@@ -3915,66 +3955,72 @@
         const strategies = _ovAllStrategies;
         if (!strategies.length) { panel.innerHTML = ''; return; }
 
-        const withInv = strategies.filter((s, i) => strategyInvestedIds.has(String(s.id)));
-        const noInv   = strategies.filter((s, i) => !strategyInvestedIds.has(String(s.id)));
+        const withInv = strategies.filter(s => strategyInvestedIds.has(String(s.id)));
+        const noInv   = strategies.filter(s => !strategyInvestedIds.has(String(s.id)));
+        const currentIdx = Number(document.getElementById('ovStratSel')?.value ?? -1);
 
-        const itemStyle = `display:flex;align-items:center;gap:8px;padding:7px 14px;cursor:pointer;font-size:12.5px;color:#0f172a;transition:background 0.12s;`;
-        const headerStyle = `padding:6px 14px 3px;font-size:10px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#94a3b8;`;
-
-        const renderItem = (s, i) => {
+        let itemCounter = 0;
+        const renderItem = (s) => {
           const idx = strategies.indexOf(s);
           const hasInv = strategyInvestedIds.has(String(s.id));
+          const isSel  = idx === currentIdx;
           const dot = hasInv
-            ? `<span style="width:7px;height:7px;border-radius:50%;background:#059669;flex-shrink:0;"></span>`
-            : `<span style="width:7px;height:7px;border-radius:50%;background:#e2e8f0;flex-shrink:0;"></span>`;
-          const label = s.short_name || s.name || 'Strategy ' + (idx+1);
-          return `<div data-ov-idx="${idx}" style="${itemStyle}padding-right:6px;">
-            ${dot}<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">${label}</span>
-            <button type="button" class="ov-drop-dots" data-ov-idx="${idx}"
-              style="flex-shrink:0;width:22px;height:22px;display:flex;align-items:center;justify-content:center;border:none;background:none;border-radius:5px;cursor:pointer;padding:0;opacity:0;transition:opacity 0.12s;">
+            ? `<span style="width:8px;height:8px;border-radius:50%;background:#10b981;box-shadow:0 0 0 2px rgba(16,185,129,0.2);flex-shrink:0;"></span>`
+            : `<span style="width:8px;height:8px;border-radius:50%;background:#e2e8f0;flex-shrink:0;"></span>`;
+          const label = s.short_name || s.name || 'Strategy ' + (idx + 1);
+          const selClass = isSel ? ' selected' : '';
+          const delay = (itemCounter++ * 0.025).toFixed(3);
+          return `<div data-ov-idx="${idx}" class="strat-drop-item${selClass}"
+            style="animation:strat-item-in 0.18s ease both;animation-delay:${delay}s;">
+            ${dot}
+            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">${label}</span>
+            ${isSel ? `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>` : ''}
+            <button type="button" class="strat-drop-dots ov-drop-dots" data-ov-idx="${idx}">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="#64748b"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>
             </button>
           </div>`;
         };
 
         let html = '';
-        html += `<div style="${itemStyle}color:#2563eb;font-weight:600;" onmouseover="this.style.background='#eff6ff'" onmouseout="this.style.background=''"
-          onclick="event.stopPropagation();window.ovPromptNewStrategy()">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 4v16m8-8H4"/></svg>
+        /* Add New Strategy row */
+        html += `<div class="strat-drop-item" id="ovDropAddNew"
+          style="color:#4f46e5;font-weight:600;animation:strat-item-in 0.18s ease both;">
+          <span style="width:22px;height:22px;border-radius:6px;background:#eef2ff;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="2.5" stroke-linecap="round"><path d="M12 4v16m8-8H4"/></svg>
+          </span>
           Add New Strategy
         </div>`;
-        html += `<div style="height:1px;background:#f1f5f9;margin:5px 0;"></div>`;
+        html += `<div class="strat-drop-sep"></div>`;
         if (withInv.length) {
-          html += `<div style="${headerStyle}">With Clients (${withInv.length})</div>`;
+          html += `<div class="strat-drop-header">Active <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#94a3b8;font-size:9px;">(${withInv.length})</span></div>`;
           html += withInv.map(s => renderItem(s)).join('');
         }
         if (noInv.length) {
-          if (withInv.length) html += `<div style="height:1px;background:#f1f5f9;margin:5px 0;"></div>`;
-          html += `<div style="${headerStyle}">No Clients (${noInv.length})</div>`;
+          if (withInv.length) html += `<div class="strat-drop-sep"></div>`;
+          html += `<div class="strat-drop-header">Draft <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#94a3b8;font-size:9px;">(${noInv.length})</span></div>`;
           html += noInv.map(s => renderItem(s)).join('');
         }
 
         panel.innerHTML = html;
 
-        /* Wire up row hover, row click (select), and dots button (context menu) */
+        /* Add New Strategy */
+        panel.querySelector('#ovDropAddNew')?.addEventListener('click', (e) => {
+          e.stopPropagation();
+          _ovClosePanel();
+          window.ovPromptNewStrategy();
+        });
+
+        /* Wire up row clicks and dots */
         panel.querySelectorAll('[data-ov-idx]').forEach((row) => {
-          if (row.tagName === 'BUTTON') return; /* handled below */
+          if (row.tagName === 'BUTTON') return;
           const idx = Number(row.dataset.ovIdx);
           const s   = strategies[idx];
           if (!s) return;
           const dotsBtn = row.querySelector('.ov-drop-dots');
-          row.addEventListener('mouseenter', () => {
-            row.style.background = '#f8fafc';
-            if (dotsBtn) dotsBtn.style.opacity = '1';
-          });
-          row.addEventListener('mouseleave', () => {
-            row.style.background = '';
-            if (dotsBtn) dotsBtn.style.opacity = '0';
-          });
           row.addEventListener('click', (e) => {
             if (e.target.closest('.ov-drop-dots')) return;
             window.ovSelectStrategy(idx);
-            panel.style.display = 'none';
+            _ovClosePanel();
           });
           if (dotsBtn) {
             dotsBtn.addEventListener('click', (e) => {
@@ -3988,8 +4034,7 @@
 
       document.addEventListener('click', (e) => {
         const wrapper = document.getElementById('ovStratDropWrapper');
-        const panel   = document.getElementById('ovStratPanel');
-        if (panel && wrapper && !wrapper.contains(e.target)) panel.style.display = 'none';
+        if (wrapper && !wrapper.contains(e.target)) _ovClosePanel();
       });
 
       const initOverviewDashboard = async (strategies, secMap) => {
@@ -4021,7 +4066,10 @@
         const sel = document.getElementById('ovStratSel');
         if (sel) sel.value = String(idx);
         const btnLabel = document.getElementById('ovStratBtnLabel');
-        if (btnLabel) btnLabel.textContent = strat.short_name || strat.name || 'Strategy ' + (idx+1);
+        const btnDot   = document.getElementById('ovStratBtnDot');
+        const hasInv   = strategyInvestedIds.has(String(strat.id));
+        if (btnLabel) { btnLabel.textContent = strat.short_name || strat.name || 'Strategy ' + (idx+1); btnLabel.style.color = '#0f172a'; }
+        if (btnDot)   { btnDot.style.display = 'block'; btnDot.style.background = hasInv ? '#10b981' : '#e2e8f0'; }
         /* Switch to Overview tab, hide strategy mgmt, reveal strategy content */
         document.getElementById('tabOverview')?.click();
         const stratMgmt = document.getElementById('tabStrategiesPanel');
@@ -4199,7 +4247,9 @@
         await editStrategy(minimalStrat, globalSecuritiesMap);
         /* Update dropdown label */
         const btnLabel = document.getElementById('ovStratBtnLabel');
-        if (btnLabel) btnLabel.textContent = name;
+        const btnDot   = document.getElementById('ovStratBtnDot');
+        if (btnLabel) { btnLabel.textContent = name; btnLabel.style.color = '#0f172a'; }
+        if (btnDot)   { btnDot.style.display = 'block'; btnDot.style.background = '#e2e8f0'; }
         ovBuildStratDrop();
       };
 
