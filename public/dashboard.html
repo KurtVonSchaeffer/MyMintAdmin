@@ -263,15 +263,19 @@
       }
 
       .top-nav {
-        background: rgba(255, 255, 255, 0.82);
-        backdrop-filter: blur(8px);
-        border-bottom: 1px solid #e8defa;
+        background: rgba(255, 255, 255, 0.92);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border-bottom: 1px solid #e2e8f0;
         padding: 0 32px;
-        min-height: 70px;
+        min-height: 64px;
         display: flex;
         align-items: center;
         justify-content: space-between;
         gap: 16px;
+        position: sticky;
+        top: 0;
+        z-index: 100;
       }
 
       .top-nav-actions {
@@ -445,15 +449,21 @@
       }
 
       .tab-active {
-        color: #0f172a;
+        color: #1e40af;
         font-weight: 600;
-        border-bottom: 2px solid #0f172a;
+        border-bottom: 2px solid #2563eb;
+        letter-spacing: -0.01em;
       }
 
       .tab-inactive {
-        color: #64748b;
+        color: #94a3b8;
         font-weight: 500;
         border-bottom: 2px solid transparent;
+        transition: color 0.15s ease;
+      }
+
+      .tab-inactive:hover {
+        color: #475569;
       }
 
       #topAssetsRow button[data-sym]:focus,
@@ -590,11 +600,30 @@
         <div class="sk-panel" style="height:260px"></div>
         <div class="sk-rows"><div class="sk-row"></div><div class="sk-row"></div><div class="sk-row"></div><div class="sk-row"></div><div class="sk-row"></div><div class="sk-row" style="width:58%"></div></div>
       </div>
-      <div class="top-nav"></div>
+      <div class="top-nav">
+        <div style="display:flex;flex-direction:column;gap:2px;">
+          <span style="font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#94a3b8;font-family:ui-monospace,monospace;">Mint CRM &rsaquo; Dashboard</span>
+          <span id="topNavTitle" style="font-size:20px;font-weight:700;color:#0f172a;letter-spacing:-0.03em;line-height:1.15;">Overview</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:20px;">
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:1px;">
+            <span id="topNavDate" style="font-size:11px;color:#64748b;font-weight:500;"></span>
+            <span id="topNavTime" style="font-size:11px;color:#94a3b8;font-family:ui-monospace,monospace;font-weight:400;"></span>
+          </div>
+          <div style="width:1px;height:28px;background:#e2e8f0;"></div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <div style="width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#1e40af 0%,#3b82f6 100%);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;" id="topNavAvatar">A</div>
+            <div style="display:flex;flex-direction:column;gap:1px;">
+              <span style="font-size:11px;font-weight:600;color:#0f172a;" id="topNavUser">Admin</span>
+              <span style="font-size:10px;color:#94a3b8;font-weight:500;">Administrator</span>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <div class="dashboard-shell">
         <div class="max-w-7xl mx-auto px-5 py-5 space-y-4">
-          <div class="flex items-center gap-4 border-b border-slate-200 pb-2">
+          <div class="flex items-center gap-6 border-b border-slate-200 pb-0">
             <button
               id="tabOverview"
               type="button"
@@ -1654,7 +1683,15 @@
       ];
 
       /* ─────────────────────── TAB SWITCHING ─────────────────────── */
+      const _tabTitleMap = {
+        tabOverview: 'Overview',
+        tabStrategies: 'Strategy Management',
+        tabFactsheets: 'Factsheets',
+      };
+
       const switchTab = (activeTab) => {
+        const titleEl = document.getElementById('topNavTitle');
+        if (titleEl && activeTab?.id) titleEl.textContent = _tabTitleMap[activeTab.id] || activeTab.textContent.trim();
         const tabs = [
           tabOverview,
           tabStrategies,
@@ -5680,9 +5717,32 @@
 
       window.addEventListener("DOMContentLoaded", async function () {
         window.__dbgBreadcrumb('DOMContentLoaded:start');
+
+        /* ── Top-nav clock ── */
+        const _fmtDate = () => new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+        const _fmtTime = () => new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+        const dateEl = document.getElementById('topNavDate');
+        const timeEl = document.getElementById('topNavTime');
+        if (dateEl) dateEl.textContent = _fmtDate();
+        if (timeEl) { timeEl.textContent = _fmtTime(); setInterval(() => { if (timeEl) timeEl.textContent = _fmtTime(); }, 1000); }
+
         const ok = await requireSession();
         if (!ok) { window.__dbgBreadcrumb('DOMContentLoaded:no-session'); return; }
         window.__dbgBreadcrumb('DOMContentLoaded:session-ok');
+
+        /* ── Sync user display in top-nav ── */
+        try {
+          const { data: { session } } = await supabaseClient.auth.getSession();
+          if (session?.user) {
+            const email = session.user.email || '';
+            const initials = email ? email[0].toUpperCase() : 'A';
+            const avatarEl = document.getElementById('topNavAvatar');
+            const userEl = document.getElementById('topNavUser');
+            if (avatarEl) avatarEl.textContent = initials;
+            if (userEl) userEl.textContent = email.split('@')[0] || 'Admin';
+          }
+        } catch(e) {}
+
         loadStrategies().catch(err => console.error('[Init] loadStrategies failed:', err));
         loadTopHoldings().catch(err => console.error('[Init] loadTopHoldings failed:', err));
         loadUserStats().catch(err => console.error('[Init] loadUserStats failed:', err));
