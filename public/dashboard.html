@@ -3900,7 +3900,17 @@
           resolve(result);
         };
         const onStay  = () => cleanup(false);
-        const onLeave = () => { _stratDirty = false; cleanup(true); };
+        const onLeave = () => {
+          _stratDirty = false;
+          /* Discard all unsaved holdings so subsequent actions see a clean state */
+          formHoldings = [];
+          editingStrategyId = null;
+          activeStrategyTabId = null;
+          if (typeof setStrategyWorkspaceVisible === 'function') setStrategyWorkspaceVisible(false);
+          if (typeof renderFormHoldings === 'function') renderFormHoldings();
+          if (typeof renderStrategyTabs === 'function') renderStrategyTabs();
+          cleanup(true);
+        };
         stayBtn.addEventListener('click',  onStay);
         leaveBtn.addEventListener('click', onLeave);
       });
