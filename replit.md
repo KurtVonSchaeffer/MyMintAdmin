@@ -13,14 +13,23 @@ Internal admin dashboard for the Mint investment platform. Provides client manag
 ## Key Pages
 - `/signin.html` - Admin login (Supabase Auth)
 - `/index.html` - Client profiles / CRM
-- `/dashboard.html` - Main dashboard with three tabs: Overview, Strategies, Factsheets
+- `/dashboard.html` - Main dashboard with four tabs: Overview, Strategy Management, Rebalancing, Factsheets
+- `/eft.html` - EFT Payments standalone page (upload bank CSV, confirm pending deposits)
 - `/orderbook.html` - Order book email runs
 - `/strategies.html` - Standalone strategies page (legacy, content now in dashboard)
 - `/factsheet.html` - Standalone factsheet page (legacy, content now in dashboard)
 
 ## Dashboard Tabs
-### Overview Tab
-- Strategy chart visualization, user stats (total, KYC, bank linked), featured strategies, top performing holdings, all strategies list
+### Overview Tab (Lovable-style redesign)
+- **Live market ticker** — horizontally scrolling bar with security prices and day-change % from `securities` table (simulated live price updates every 5s)
+- **Strategy selector** — dropdown to pick which strategy to view; data re-renders for each selection
+- **Strategy title bar** — name, inception date, instrument count, client count; AUM and NAV on the right
+- **KPI Strip** (7 cards) — YTD Return, 1Y Return, Sharpe Ratio, Max Drawdown, Volatility, Beta, Alpha (from `strategy_analytics.summary`; shows "—" for unavailable fields)
+- **Performance chart** (ECharts line, 8 cols) — from `strategy_analytics.curves`; falls back to YTD-scaled illustrative data
+- **Sector Exposure** (ECharts donut, 4 cols) — grouped by security sector or individual holding weight with legend
+- **Composition table** (7 cols) — holdings with price, weight bar, day change from `securities`
+- **Investors table** (5 cols) — from `stock_holdings` by strategy_id, joined with `profiles`; shows qty, P&L, return %
+- JS functions: `initOverviewDashboard`, `window.ovSelectStrategy`, `ovRenderTitleBar`, `ovRenderKpiStrip`, `ovRenderTicker`, `ovRenderPerfChart`, `ovRenderSectorChart`, `ovRenderHoldings`, `ovRenderInvestors`
 
 ### Strategies Tab
 - **Create Strategy form** with holdings builder (search securities from DB, add with shares)

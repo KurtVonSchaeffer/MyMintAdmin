@@ -208,10 +208,10 @@ const maybeRunDailyOrderbookScheduler = async () => {
 
 const startDailyOrderbookScheduler = () => {
   setInterval(() => {
-    maybeRunDailyOrderbookScheduler();
+    maybeRunDailyOrderbookScheduler().catch(err => console.error('[OrderbookScheduler] Interval error:', err?.message || err));
   }, 30000);
 
-  maybeRunDailyOrderbookScheduler();
+  maybeRunDailyOrderbookScheduler().catch(err => console.error('[OrderbookScheduler] Startup error:', err?.message || err));
 };
 
 const syncAllSecuritiesFromYahoo = async () => {
@@ -349,11 +349,11 @@ const maybeRunDailyMarketSync = async () => {
 
 const startMarketDataScheduler = () => {
   setTimeout(() => {
-    syncAllSecuritiesFromYahoo();
+    syncAllSecuritiesFromYahoo().catch(err => console.error('[MarketSync] Startup sync error:', err?.message || err));
   }, 10000);
 
   setInterval(() => {
-    maybeRunDailyMarketSync();
+    maybeRunDailyMarketSync().catch(err => console.error('[MarketSync] Scheduled sync error:', err?.message || err));
   }, 60000);
 };
 
@@ -536,6 +536,15 @@ const getSumsubAuthHeaders = (method, pathWithQuery) => {
 
 
 const server = http.createServer((req, res) => {
+  if (req.url === '/favicon.ico') {
+    fs.readFile(path.join(publicDir, 'icon.png'), (err, data) => {
+      if (err) { res.writeHead(204); res.end(); return; }
+      res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=86400' });
+      res.end(data);
+    });
+    return;
+  }
+
   if (req.url.startsWith('/api/mandate-data') && req.method === 'GET') {
     const token = parseBearerToken(req.headers.authorization);
     if (!token) {
@@ -973,10 +982,48 @@ const server = http.createServer((req, res) => {
   });
 });
 
-server.listen(port, () => {
-  console.log(`Server running at http://localhost:${port}`);
-  if (orderbookEnableIntervalScheduler) {
-    startDailyOrderbookScheduler();
-  }
-  startMarketDataScheduler();
+process.on('SIGTERM', () => {
+  console.log('[Process] SIGTERM received — closing server gracefully...');
+  server.close(() => {
+    console.log('[Process] Server closed, exiting cleanly.');
+    process.exit(0);
+  });
+  setTimeout(() => process.exit(0), 5000).unref();
 });
+
+process.on('SIGINT', () => {
+  server.close(() => process.exit(0));
+  setTimeout(() => process.exit(0), 3000).unref();
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('[Process] Uncaught exception:', err?.message || err);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('[Process] Unhandled promise rejection:', reason?.message || reason);
+});
+
+const startServer = (portToUse) => {
+  server.listen(portToUse, () => {
+    console.log(`Server running at http://localhost:${portToUse}`);
+    if (orderbookEnableIntervalScheduler) {
+      startDailyOrderbookScheduler();
+    }
+    startMarketDataScheduler();
+  });
+};
+
+let _startRetries = 0;
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE' && _startRetries < 5) {
+    _startRetries++;
+    console.error(`[Server] Port ${port} in use — retry ${_startRetries}/5 in 2s...`);
+    setTimeout(() => startServer(port), 2000);
+  } else {
+    console.error('[Server] HTTP server error:', err?.message || err);
+    process.exit(1);
+  }
+});
+
+startServer(port);
