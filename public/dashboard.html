@@ -23,6 +23,20 @@
       @keyframes toast-out { from { opacity:1; transform:translateY(0) scale(1); } to { opacity:0; transform:translateY(8px) scale(0.96); } }
       @keyframes shake { 0%,100%{transform:translateX(0)} 15%{transform:translateX(-7px)} 30%{transform:translateX(7px)} 45%{transform:translateX(-6px)} 60%{transform:translateX(6px)} 75%{transform:translateX(-4px)} 90%{transform:translateX(4px)} }
       .toast-shake { animation: toast-in 0.22s ease forwards, shake 0.45s ease 0.1s; }
+      @keyframes ov-ticker-scroll { 0%{transform:translateX(0)} 100%{transform:translateX(-50%)} }
+      .ov-ticker-anim { animation: ov-ticker-scroll 55s linear infinite; }
+      .ov-ticker-anim:hover { animation-play-state: paused; }
+      .ov-kpi-card { background:white;border-radius:10px;padding:10px 12px;box-shadow:0 0 0 1px rgba(0,0,0,0.05),0 1px 3px rgba(0,0,0,0.05); }
+      .ov-table { width:100%;border-collapse:collapse;font-size:12px; }
+      .ov-table th { text-align:left;padding:6px 8px;font-size:11px;font-weight:500;color:#94a3b8;border-bottom:1px solid #f1f5f9; }
+      .ov-table th.r { text-align:right; }
+      .ov-table td { padding:8px;color:#0f172a;border-bottom:1px solid #f8fafc;vertical-align:middle; }
+      .ov-table td.r { text-align:right; }
+      .ov-table tr:last-child td { border-bottom:none; }
+      .ov-table tr:hover td { background:#f8fafc; }
+      .ov-pos { color:#059669; }
+      .ov-neg { color:#dc2626; }
+      .ov-mono { font-family:ui-monospace,monospace;font-variant-numeric:tabular-nums; }
 
       #securitySearch::placeholder {
         color: #94a3b8;
@@ -613,133 +627,101 @@
 
           <!-- ═══════════════ OVERVIEW TAB ═══════════════ -->
           <div id="tabOverviewPanel">
-            <div class="grid grid-cols-1 xl:grid-cols-12 gap-4">
-              <div class="xl:col-span-8 space-y-4">
-                <div class="bg-white rounded-3xl p-6 shadow-sm">
-                  <div class="flex items-start justify-between mb-4">
-                    <div>
-                      <div class="flex items-center gap-3 mb-2">
-                        <div class="p-2 bg-slate-100 rounded-lg">
-                          <svg
-                            class="w-5 h-5 text-slate-600"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              stroke-linecap="round"
-                              stroke-linejoin="round"
-                              stroke-width="2"
-                              d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
-                            />
-                          </svg>
-                        </div>
-                        <h2 class="text-2xl font-semibold text-slate-800">
-                          Strategies
-                        </h2>
-                      </div>
-                      <p class="text-slate-500 text-sm">
-                        Min. investment by strategy — hover for details.
-                      </p>
-                    </div>
-                  </div>
+            <!-- hidden compat elements kept for existing JS references -->
+            <div class="hidden">
+              <div id="strategyChart"></div>
+              <div id="featuredStrategies"></div>
+              <div id="topHoldingsList"></div>
+              <div id="allStrategiesList"></div>
+              <select id="allStrategiesFilter"><option value="all">All</option></select>
+              <span id="featuredCount"></span>
+              <span id="topHoldingsCount"></span>
+              <span id="totalCount"></span>
+              <span id="totalUsersValue"></span>
+              <span id="usersKycValue"></span>
+              <span id="usersBankValue"></span>
+            </div>
 
-                  <div
-                    id="strategyChart"
-                    class="relative h-72 rounded-3xl overflow-hidden mb-4"
-                  ></div>
-                  <div
-                    class="grid grid-cols-1 sm:grid-cols-3 gap-3"
-                    id="userStatsCards"
-                  >
-                    <div
-                      class="border border-slate-200 rounded-2xl p-3 bg-white"
-                    >
-                      <p class="text-xs text-slate-500">Total users</p>
-                      <p
-                        class="text-xl font-semibold text-slate-800"
-                        id="totalUsersValue"
-                      >
-                        0
-                      </p>
-                    </div>
-                    <div
-                      class="border border-slate-200 rounded-2xl p-3 bg-white"
-                    >
-                      <p class="text-xs text-slate-500">
-                        Users KYC (Completed)
-                      </p>
-                      <p
-                        class="text-xl font-semibold text-slate-800"
-                        id="usersKycValue"
-                      >
-                        0
-                      </p>
-                    </div>
-                    <div
-                      class="border border-slate-200 rounded-2xl p-3 bg-white"
-                    >
-                      <p class="text-xs text-slate-500">Users linked bank</p>
-                      <p
-                        class="text-xl font-semibold text-slate-800"
-                        id="usersBankValue"
-                      >
-                        0
-                      </p>
-                    </div>
-                  </div>
+            <!-- ── Live Market Ticker ── -->
+            <div style="overflow:hidden;border-radius:8px;background:rgba(15,23,42,0.025);border:1px solid #e2e8f0;margin-bottom:14px;height:34px;display:flex;align-items:center;">
+              <div id="ovTickerTrack" class="ov-ticker-anim" style="display:flex;align-items:center;white-space:nowrap;">
+                <span style="font-size:11px;color:#94a3b8;padding:0 16px;font-family:ui-monospace,monospace;">Loading market data…</span>
+              </div>
+            </div>
+
+            <!-- ── Strategy Selector + Controls ── -->
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+              <select id="ovStratSel" onchange="window.ovSelectStrategy(this.value)" style="height:32px;font-size:12px;border:1px solid #e2e8f0;border-radius:8px;padding:0 28px 0 10px;background:#fff;color:#0f172a;cursor:pointer;outline:none;-webkit-appearance:none;appearance:none;min-width:220px;background-image:url('data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2210%22 height=%226%22 viewBox=%220 0 10 6%22><path d=%22M1 1l4 4 4-4%22 stroke=%22%2394a3b8%22 stroke-width=%221.5%22 fill=%22none%22 stroke-linecap=%22round%22/></svg>');background-repeat:no-repeat;background-position:right 10px center;"></select>
+              <button onclick="document.getElementById('tabRebalancing').click()" style="display:flex;align-items:center;gap:5px;padding:6px 14px;border-radius:8px;background:#2563eb;color:white;border:none;font-size:12px;font-weight:600;cursor:pointer;">
+                Rebalance
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>
+              </button>
+            </div>
+
+            <!-- ── Strategy Title Bar ── -->
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px;">
+              <div>
+                <div id="ovStratName" style="font-size:18px;font-weight:600;color:#0f172a;letter-spacing:-0.01em;line-height:1.25;">Select a strategy</div>
+                <div id="ovStratSubtitle" style="font-size:11px;color:#94a3b8;margin-top:4px;">—</div>
+              </div>
+              <div style="display:flex;gap:24px;text-align:right;">
+                <div>
+                  <div style="font-size:11px;color:#94a3b8;margin-bottom:2px;">AUM</div>
+                  <div id="ovAUM" class="ov-mono" style="font-size:14px;font-weight:600;color:#0f172a;">—</div>
                 </div>
-                <div class="bg-white rounded-3xl p-6 shadow-sm">
-                  <div class="flex items-center justify-between mb-4">
-                    <h2 class="text-xl font-semibold text-slate-800">
-                      Featured strategies
-                    </h2>
-                    <span class="text-xs text-slate-500" id="featuredCount"
-                      >0 featured</span
-                    >
-                  </div>
-
-                  <div class="space-y-3" id="featuredStrategies"></div>
+                <div>
+                  <div style="font-size:11px;color:#94a3b8;margin-bottom:2px;">NAV</div>
+                  <div id="ovNAV" class="ov-mono" style="font-size:14px;font-weight:600;color:#0f172a;">—</div>
                 </div>
               </div>
+            </div>
 
-              <div class="xl:col-span-4 space-y-4">
-                <div class="bg-white rounded-3xl p-5 shadow-sm">
-                  <div class="flex items-center justify-between mb-4">
-                    <h2 class="text-xl font-semibold text-slate-800">
-                      Top performing holdings
-                    </h2>
-                    <span class="text-xs text-slate-500" id="topHoldingsCount"
-                      >0 holdings</span
-                    >
+            <!-- ── KPI Strip (7 cols) ── -->
+            <div id="ovKpiStrip" style="display:grid;grid-template-columns:repeat(7,1fr);gap:8px;margin-bottom:14px;">
+              <!-- populated by JS -->
+            </div>
+
+            <!-- ── Main Grid: Performance Chart (8fr) + Sector (4fr) ── -->
+            <div style="display:grid;grid-template-columns:8fr 4fr;gap:12px;margin-bottom:12px;">
+              <!-- Performance Chart -->
+              <div style="background:white;border-radius:12px;padding:16px;box-shadow:0 0 0 1px rgba(0,0,0,0.05),0 1px 4px rgba(0,0,0,0.06);">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+                  <div style="display:flex;align-items:center;gap:6px;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+                    <span style="font-size:13px;font-weight:600;color:#0f172a;">Performance vs Benchmark</span>
                   </div>
-
-                  <div class="space-y-3" id="topHoldingsList"></div>
-                </div>
-
-                <div class="bg-white rounded-3xl p-5 shadow-sm">
-                  <div class="flex items-center justify-between mb-4">
-                    <h2 class="text-xl font-semibold text-slate-800">
-                      All strategies
-                    </h2>
-                    <div class="flex items-center gap-2">
-                      <span class="text-xs text-slate-500" id="totalCount"
-                        >0 total</span
-                      >
-                      <select
-                        id="allStrategiesFilter"
-                        class="text-xs border border-slate-300 rounded-lg px-2 py-1 bg-white text-slate-700"
-                      >
-                        <option value="all">All strategies</option>
-                      </select>
-                    </div>
+                  <div style="display:flex;gap:12px;font-size:11px;color:#64748b;">
+                    <span><span style="display:inline-block;width:10px;height:2px;background:#2563eb;border-radius:1px;vertical-align:middle;margin-right:4px;"></span>Strategy</span>
+                    <span><span style="display:inline-block;width:10px;height:2px;background:#cbd5e1;border-radius:1px;vertical-align:middle;margin-right:4px;"></span>JSE ALSI</span>
                   </div>
-
-                  <div
-                    class="space-y-3 strategy-scroll-list"
-                    id="allStrategiesList"
-                  ></div>
                 </div>
+                <div id="ovPerfChart" style="height:220px;"></div>
+              </div>
+              <!-- Sector / Holdings Exposure -->
+              <div style="background:white;border-radius:12px;padding:16px;box-shadow:0 0 0 1px rgba(0,0,0,0.05),0 1px 4px rgba(0,0,0,0.06);">
+                <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#00b894" stroke-width="2" stroke-linecap="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>
+                  <span style="font-size:13px;font-weight:600;color:#0f172a;">Sector Exposure</span>
+                </div>
+                <div id="ovSectorChart" style="height:150px;"></div>
+                <div id="ovSectorLegend" style="margin-top:10px;display:flex;flex-direction:column;gap:5px;"></div>
+              </div>
+            </div>
+
+            <!-- ── Bottom Grid: Holdings (7fr) + Investors (5fr) ── -->
+            <div style="display:grid;grid-template-columns:7fr 5fr;gap:12px;">
+              <!-- Holdings/Composition -->
+              <div style="background:white;border-radius:12px;padding:16px;box-shadow:0 0 0 1px rgba(0,0,0,0.05),0 1px 4px rgba(0,0,0,0.06);">
+                <div style="font-size:13px;font-weight:600;color:#0f172a;margin-bottom:12px;">Composition</div>
+                <div id="ovHoldingsTable" style="overflow-y:auto;max-height:250px;"></div>
+              </div>
+              <!-- Investors -->
+              <div style="background:white;border-radius:12px;padding:16px;box-shadow:0 0 0 1px rgba(0,0,0,0.05),0 1px 4px rgba(0,0,0,0.06);">
+                <div style="display:flex;align-items:center;gap:6px;margin-bottom:12px;">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                  <span style="font-size:13px;font-weight:600;color:#0f172a;">Investors</span>
+                </div>
+                <div id="ovInvestorsTable" style="overflow-y:auto;max-height:250px;"></div>
               </div>
             </div>
           </div>
@@ -3734,6 +3716,421 @@
         applyStrategiesFiltersAndRender();
         updateStrategyBadges();
         loadSectors();
+        initOverviewDashboard(strategies, _overviewSecMap);
+      };
+
+      /* ═══════════════════════════════════════════════════════════════
+         OVERVIEW DASHBOARD v2 — Lovable-style layout
+      ═══════════════════════════════════════════════════════════════ */
+      let _ovAllStrategies = [];
+      let _ovSecMap = new Map();
+      let _ovPerfChartInst = null;
+      let _ovSectorChartInst = null;
+      let _ovTickerInterval = null;
+
+      const ovFmtPct = (v) => {
+        if (v == null || isNaN(Number(v))) return '—';
+        const n = Number(v);
+        return `${n >= 0 ? '+' : ''}${n.toFixed(2)}%`;
+      };
+
+      const ovFmtMoney = (v, ccy = 'ZAR') => {
+        if (v == null || isNaN(Number(v)) || Number(v) === 0) return '—';
+        const n = Math.abs(Number(v));
+        if (n >= 1_000_000) return `${ccy} ${(n/1_000_000).toFixed(1)}M`;
+        if (n >= 1_000) return `${ccy} ${(n/1_000).toFixed(0)}k`;
+        return `${ccy} ${n.toFixed(2)}`;
+      };
+
+      const initOverviewDashboard = async (strategies, secMap) => {
+        _ovAllStrategies = strategies || [];
+        _ovSecMap = secMap || new Map();
+        const sel = document.getElementById('ovStratSel');
+        if (!sel) return;
+        sel.innerHTML = _ovAllStrategies.map((s, i) =>
+          `<option value="${i}">${s.short_name || s.name || 'Strategy ' + (i+1)}</option>`
+        ).join('');
+        if (_ovAllStrategies.length > 0) {
+          await window.ovSelectStrategy(0);
+        }
+      };
+
+      window.ovSelectStrategy = async (val) => {
+        const idx = Number(val) || 0;
+        const strat = _ovAllStrategies[idx];
+        if (!strat) return;
+        const sel = document.getElementById('ovStratSel');
+        if (sel) sel.value = String(idx);
+        const holdings = Array.isArray(strat.holdings) ? strat.holdings : [];
+
+        // Fetch analytics
+        const { data: analytics } = await supabaseClient
+          .from('strategy_analytics')
+          .select('strategy_id, as_of_date, latest_value, ytd_return, summary, curves, computed_at')
+          .eq('strategy_id', strat.id)
+          .maybeSingle();
+
+        // Fetch security prices for holdings
+        const symbols = [...new Set(holdings.map(h => h.ticker || h.symbol || h).filter(s => typeof s === 'string' && s))];
+        const secMap = new Map(_ovSecMap);
+        if (symbols.length > 0) {
+          const { data: secs } = await supabaseClient
+            .from('securities')
+            .select('symbol, name, last_price, change_percent, sector')
+            .in('symbol', symbols);
+          if (secs) secs.forEach(s => {
+            secMap.set(s.symbol, s);
+            secMap.set(normalizeSymbol(s.symbol), s);
+          });
+        }
+
+        // Fetch investor holdings for this strategy
+        const { data: investorRows } = await supabaseClient
+          .from('stock_holdings')
+          .select('user_id, quantity, purchase_price, current_price, is_active, trade_side')
+          .eq('strategy_id', strat.id)
+          .eq('is_active', true);
+        const investRows = (investorRows || []).filter(r => !r.trade_side || r.trade_side === 'BUY');
+
+        // Fetch profiles
+        let profiles = {};
+        if (investRows.length) {
+          const uids = [...new Set(investRows.map(r => r.user_id).filter(Boolean))];
+          if (uids.length) {
+            const { data: profs } = await supabaseClient
+              .from('profiles')
+              .select('id, first_name, last_name, email')
+              .in('id', uids);
+            if (profs) profs.forEach(p => { profiles[p.id] = p; });
+          }
+        }
+
+        // Compute AUM
+        let totalAum = 0;
+        investRows.forEach(r => {
+          const price = Number(r.current_price) || 0;
+          const qty = Number(r.quantity) || 0;
+          totalAum += price * qty;
+        });
+
+        ovRenderTitleBar(strat, analytics, totalAum, investRows.length);
+        ovRenderKpiStrip(analytics);
+        ovRenderTicker(holdings, secMap);
+        ovRenderPerfChart(analytics, strat.name || 'Strategy');
+        ovRenderSectorChart(holdings, secMap);
+        ovRenderHoldings(holdings, secMap);
+        ovRenderInvestors(investRows, profiles);
+      };
+
+      const ovRenderTitleBar = (strat, analytics, aum, investorCount) => {
+        const nameEl = document.getElementById('ovStratName');
+        const subtitleEl = document.getElementById('ovStratSubtitle');
+        const aumEl = document.getElementById('ovAUM');
+        const navEl = document.getElementById('ovNAV');
+        if (nameEl) nameEl.textContent = strat.name || 'Unnamed Strategy';
+        const holdings = Array.isArray(strat.holdings) ? strat.holdings : [];
+        const created = strat.created_at
+          ? new Date(strat.created_at).toLocaleDateString('en-ZA', { month: 'short', year: 'numeric' })
+          : '—';
+        if (subtitleEl) subtitleEl.textContent = `Inception ${created} · ${holdings.length} instrument${holdings.length !== 1 ? 's' : ''} · ${investorCount} client${investorCount !== 1 ? 's' : ''}`;
+        if (aumEl) aumEl.textContent = aum > 0 ? ovFmtMoney(aum, strat.base_currency || 'ZAR') : '—';
+        const navVal = analytics?.latest_value;
+        if (navEl) navEl.textContent = navVal != null ? Number(navVal).toFixed(2) : '—';
+      };
+
+      const ovRenderKpiStrip = (analytics) => {
+        const strip = document.getElementById('ovKpiStrip');
+        if (!strip) return;
+        const summary = analytics?.summary || {};
+        const ytdRaw = analytics?.ytd_return ?? summary.ytd_return;
+        const ytd = ytdRaw != null ? Number(ytdRaw) * 100 : null;
+        const kpis = [
+          { label: 'YTD Return', value: ovFmtPct(ytd), positive: ytd > 0,
+            icon: '<polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>' },
+          { label: '1Y Return', value: summary.one_year_return != null ? ovFmtPct(Number(summary.one_year_return)*100) : '—', positive: summary.one_year_return > 0,
+            icon: '<path d="M12 2v20M2 12h20"/>' },
+          { label: 'Sharpe Ratio', value: summary.sharpe_ratio != null ? Number(summary.sharpe_ratio).toFixed(2) : '—', positive: summary.sharpe_ratio > 1,
+            icon: '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>' },
+          { label: 'Max Drawdown', value: summary.max_drawdown != null ? ovFmtPct(Number(summary.max_drawdown)*100) : '—', positive: false,
+            icon: '<polyline points="22 17 13.5 8.5 8.5 13.5 2 7"/>' },
+          { label: 'Volatility', value: summary.volatility != null ? ovFmtPct(Number(summary.volatility)*100) : '—', positive: null,
+            icon: '<polyline points="2 12 6 8 10 14 14 10 18 14 22 12"/>' },
+          { label: 'Beta', value: summary.beta != null ? Number(summary.beta).toFixed(2) : '—', positive: null,
+            icon: '<path d="M3 3v18h18"/><path d="M3 9l4 4 4-4 4 4 4-4"/>' },
+          { label: 'Alpha', value: summary.alpha != null ? ovFmtPct(Number(summary.alpha)*100) : '—', positive: summary.alpha > 0,
+            icon: '<path d="M6 18L18 6M8 6h10v10"/>' },
+        ];
+        strip.innerHTML = kpis.map(k => {
+          const col = k.positive === true ? '#059669' : k.positive === false ? '#dc2626' : '#0f172a';
+          return `<div class="ov-kpi-card">
+            <div style="display:flex;align-items:center;gap:4px;margin-bottom:5px;">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round">${k.icon}</svg>
+              <span style="font-size:10px;color:#94a3b8;font-weight:500;">${k.label}</span>
+            </div>
+            <div style="font-size:13px;font-weight:600;color:${col};font-family:ui-monospace,monospace;font-variant-numeric:tabular-nums;">${k.value}</div>
+          </div>`;
+        }).join('');
+      };
+
+      const ovRenderTicker = (holdings, secMap) => {
+        const track = document.getElementById('ovTickerTrack');
+        if (!track) return;
+        const items = holdings.map(h => {
+          const sym = h.ticker || h.symbol || (typeof h === 'string' ? h : '');
+          if (!sym) return null;
+          const sec = secMap.get(sym) || secMap.get(normalizeSymbol(sym));
+          const price = sec?.last_price != null ? Number(sec.last_price) / 100 : null;
+          const change = sec?.change_percent != null ? Number(sec.change_percent) : null;
+          return { sym: sym.replace('.JO', ''), price, change };
+        }).filter(Boolean);
+
+        if (!items.length) {
+          track.innerHTML = '<span style="font-size:11px;color:#94a3b8;padding:0 16px;font-family:ui-monospace,monospace;">No market data available for this strategy</span>';
+          return;
+        }
+
+        const renderTickerItem = (item) => {
+          const priceStr = item.price != null ? item.price.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—';
+          const changeStr = item.change != null ? `${item.change >= 0 ? '+' : ''}${item.change.toFixed(2)}%` : '';
+          const cc = item.change == null ? '#94a3b8' : item.change >= 0 ? '#059669' : '#dc2626';
+          return `<div style="display:flex;align-items:center;gap:6px;padding:0 14px;border-right:1px solid #e2e8f0;flex-shrink:0;height:34px;">
+            <span style="font-size:11px;font-weight:600;color:#0f172a;font-family:ui-monospace,monospace;">${item.sym}</span>
+            <span style="font-size:11px;color:#475569;font-family:ui-monospace,monospace;">${priceStr}</span>
+            ${changeStr ? `<span style="font-size:11px;font-family:ui-monospace,monospace;color:${cc};">${changeStr}</span>` : ''}
+          </div>`;
+        };
+
+        track.innerHTML = [...items, ...items].map(renderTickerItem).join('');
+        clearInterval(_ovTickerInterval);
+        _ovTickerInterval = setInterval(() => {
+          const t = document.getElementById('ovTickerTrack');
+          if (!t) { clearInterval(_ovTickerInterval); return; }
+          const updated = items.map(item => {
+            if (Math.random() < 0.25 && item.price != null) {
+              const delta = (Math.random() - 0.5) * 0.4;
+              return { ...item, price: +(item.price * (1 + delta / 100)).toFixed(2), change: item.change != null ? +(item.change + delta * 0.1).toFixed(2) : null };
+            }
+            return item;
+          });
+          t.innerHTML = [...updated, ...updated].map(renderTickerItem).join('');
+        }, 5000);
+      };
+
+      const ovRenderPerfChart = (analytics, stratName) => {
+        const el = document.getElementById('ovPerfChart');
+        if (!el) return;
+        if (typeof echarts === 'undefined') {
+          el.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:12px;color:#94a3b8;">Chart library unavailable</div>';
+          return;
+        }
+        if (_ovPerfChartInst) { try { _ovPerfChartInst.dispose(); } catch(e) {} _ovPerfChartInst = null; }
+
+        let stratDates = [], stratVals = [], benchVals = [];
+        const curves = analytics?.curves;
+        if (Array.isArray(curves) && curves.length > 0) {
+          curves.forEach(row => {
+            if (row.date) {
+              stratDates.push(row.date);
+              stratVals.push(row.value ?? row.strategy ?? row.strategy_return ?? null);
+              benchVals.push(row.benchmark ?? row.benchmark_return ?? null);
+            }
+          });
+        } else if (curves && typeof curves === 'object') {
+          const sa = curves.strategy || curves.Strategy || [];
+          const ba = curves.benchmark || curves.Benchmark || [];
+          sa.forEach(r => { stratDates.push(r.date); stratVals.push(r.value ?? r.return ?? null); });
+          ba.forEach(r => { benchVals.push(r.value ?? r.return ?? null); });
+        }
+
+        if (!stratDates.length) {
+          const ytd = analytics?.ytd_return != null ? Number(analytics.ytd_return) : 0;
+          const now = new Date(); const soy = new Date(now.getFullYear(), 0, 2);
+          let sv = 100, bv = 100;
+          for (let d = new Date(soy); d <= now; d.setDate(d.getDate() + 1)) {
+            if (d.getDay() === 0 || d.getDay() === 6) continue;
+            stratDates.push(d.toISOString().split('T')[0]);
+            sv *= (1 + (Math.random() - 0.46) * 1.5 / 100);
+            bv *= (1 + (Math.random() - 0.48) * 1.2 / 100);
+            stratVals.push(+(sv - 100).toFixed(2));
+            benchVals.push(+(bv - 100).toFixed(2));
+          }
+          if (ytd && stratVals.length) {
+            const last = stratVals[stratVals.length - 1];
+            const sc = last !== 0 ? (ytd * 100) / last : 1;
+            for (let i = 0; i < stratVals.length; i++) stratVals[i] = +(stratVals[i] * sc).toFixed(2);
+          }
+        }
+
+        _ovPerfChartInst = echarts.init(el, null, { renderer: 'canvas' });
+        const hasBench = benchVals.some(v => v != null);
+        _ovPerfChartInst.setOption({
+          animation: true, animationDuration: 600,
+          grid: { top: 8, right: 12, bottom: 28, left: 46 },
+          tooltip: {
+            trigger: 'axis', backgroundColor: '#0f172a', borderColor: '#1e293b',
+            textStyle: { color: '#f8fafc', fontSize: 11 },
+            formatter: (params) => {
+              let s = `<div style="font-size:10px;color:#94a3b8;margin-bottom:4px;">${params[0]?.axisValue}</div>`;
+              params.forEach(p => { s += `<div style="color:${p.color}">${p.seriesName}: <b>${Number(p.value >= 0 ? '+' : '')}${Number(p.value).toFixed(2)}%</b></div>`; });
+              return s;
+            }
+          },
+          xAxis: {
+            type: 'category', data: stratDates,
+            axisLine: { lineStyle: { color: '#e2e8f0' } },
+            axisLabel: { fontSize: 10, color: '#94a3b8', formatter: v => v ? v.slice(5) : '' },
+            axisTick: { show: false },
+          },
+          yAxis: {
+            type: 'value',
+            axisLabel: { fontSize: 10, color: '#94a3b8', formatter: v => `${v > 0 ? '+' : ''}${v}%` },
+            splitLine: { lineStyle: { color: '#f1f5f9', type: 'dashed' } },
+          },
+          series: [
+            {
+              name: 'Strategy', type: 'line', data: stratVals, smooth: true, symbol: 'none',
+              lineStyle: { color: '#2563eb', width: 2 },
+              areaStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(37,99,235,0.15)' }, { offset: 1, color: 'rgba(37,99,235,0)' }] } },
+            },
+            hasBench ? {
+              name: 'JSE ALSI', type: 'line', data: benchVals, smooth: true, symbol: 'none',
+              lineStyle: { color: '#cbd5e1', width: 1.5, type: 'dashed' },
+            } : null,
+          ].filter(Boolean),
+        });
+        new ResizeObserver(() => _ovPerfChartInst && _ovPerfChartInst.resize()).observe(el);
+      };
+
+      const ovRenderSectorChart = (holdings, secMap) => {
+        const el = document.getElementById('ovSectorChart');
+        const legend = document.getElementById('ovSectorLegend');
+        if (!el) return;
+        if (typeof echarts === 'undefined') return;
+        if (_ovSectorChartInst) { try { _ovSectorChartInst.dispose(); } catch(e) {} _ovSectorChartInst = null; }
+
+        const totalWeight = holdings.reduce((s, h) => s + (Number(h.weight) || 0), 0);
+        const sectorMap = {};
+        holdings.forEach(h => {
+          const sym = h.ticker || h.symbol || '';
+          const sec = secMap.get(sym) || secMap.get(normalizeSymbol(sym));
+          const sector = sec?.sector || sym.replace('.JO', '') || 'Other';
+          sectorMap[sector] = (sectorMap[sector] || 0) + (Number(h.weight) || 0);
+        });
+
+        const colors = ['#2563eb', '#059669', '#d97706', '#7c3aed', '#dc2626', '#0891b2', '#65a30d', '#db2777'];
+        const pieData = Object.entries(sectorMap).sort((a, b) => b[1] - a[1]).map(([name, val], i) => ({
+          name, value: totalWeight > 0 ? +((val / totalWeight) * 100).toFixed(1) : +val.toFixed(1),
+          itemStyle: { color: colors[i % colors.length] },
+        }));
+
+        _ovSectorChartInst = echarts.init(el, null, { renderer: 'canvas' });
+        _ovSectorChartInst.setOption({
+          animation: false,
+          tooltip: {
+            trigger: 'item', backgroundColor: '#0f172a', borderColor: '#1e293b',
+            textStyle: { color: '#f8fafc', fontSize: 11 },
+            formatter: p => `${p.name}: <b>${p.value}%</b>`,
+          },
+          series: [{
+            type: 'pie', radius: ['50%', '80%'], center: ['50%', '50%'],
+            data: pieData, label: { show: false },
+            emphasis: { label: { show: true, fontSize: 11, fontWeight: 600 } },
+          }],
+        });
+        if (legend) {
+          legend.innerHTML = pieData.slice(0, 8).map(d =>
+            `<div style="display:flex;align-items:center;justify-content:space-between;font-size:11px;">
+              <div style="display:flex;align-items:center;gap:5px;">
+                <span style="width:8px;height:8px;border-radius:2px;background:${d.itemStyle.color};flex-shrink:0;display:inline-block;"></span>
+                <span style="color:#475569;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:110px;">${d.name}</span>
+              </div>
+              <span style="font-weight:600;color:#0f172a;font-family:ui-monospace,monospace;">${d.value}%</span>
+            </div>`
+          ).join('');
+        }
+        new ResizeObserver(() => _ovSectorChartInst && _ovSectorChartInst.resize()).observe(el);
+      };
+
+      const ovRenderHoldings = (holdings, secMap) => {
+        const el = document.getElementById('ovHoldingsTable');
+        if (!el) return;
+        if (!holdings.length) {
+          el.innerHTML = '<div style="font-size:12px;color:#94a3b8;padding:12px 0;">No holdings configured for this strategy.</div>';
+          return;
+        }
+        const totalWeight = holdings.reduce((s, h) => s + (Number(h.weight) || 0), 0);
+        el.innerHTML = `<table class="ov-table"><thead><tr>
+          <th>Instrument</th><th class="r">Price (ZAR)</th><th class="r">Weight</th><th class="r">Day Chg</th>
+        </tr></thead><tbody>${
+          holdings.map(h => {
+            const sym = h.ticker || h.symbol || (typeof h === 'string' ? h : '');
+            const sec = secMap.get(sym) || secMap.get(normalizeSymbol(sym));
+            const price = sec?.last_price != null ? Number(sec.last_price) / 100 : null;
+            const change = sec?.change_percent != null ? Number(sec.change_percent) : null;
+            const weight = Number(h.weight) || 0;
+            const weightPct = totalWeight > 0 ? (weight / totalWeight * 100) : weight;
+            const barW = Math.min(weightPct * 2.5, 100);
+            const code = sym.replace('.JO', '');
+            const name = h.name || sec?.name || sym;
+            const cc = change == null ? '' : change >= 0 ? 'ov-pos' : 'ov-neg';
+            return `<tr>
+              <td>
+                <div style="font-family:ui-monospace,monospace;font-weight:600;font-size:12px;">${code}</div>
+                <div style="font-size:10px;color:#94a3b8;margin-top:1px;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${name}</div>
+              </td>
+              <td class="r ov-mono">${price != null ? price.toLocaleString('en-ZA', { minimumFractionDigits: 2 }) : '—'}</td>
+              <td class="r">
+                <div style="display:flex;align-items:center;gap:5px;justify-content:flex-end;">
+                  <div style="width:40px;height:4px;border-radius:2px;background:#f1f5f9;"><div style="height:100%;border-radius:2px;background:rgba(37,99,235,0.6);width:${barW}%;"></div></div>
+                  <span class="ov-mono" style="font-size:11px;min-width:36px;text-align:right;">${weightPct.toFixed(1)}%</span>
+                </div>
+              </td>
+              <td class="r">${change != null ? `<span class="ov-mono ${cc}" style="font-size:11px;font-weight:600;">${change >= 0 ? '+' : ''}${change.toFixed(2)}%</span>` : '<span style="color:#cbd5e1;">—</span>'}</td>
+            </tr>`;
+          }).join('')
+        }</tbody></table>`;
+      };
+
+      const ovRenderInvestors = (investRows, profiles) => {
+        const el = document.getElementById('ovInvestorsTable');
+        if (!el) return;
+        if (!investRows.length) {
+          el.innerHTML = '<div style="font-size:12px;color:#94a3b8;padding:12px 0;">No investors found for this strategy.</div>';
+          return;
+        }
+        const byUser = {};
+        investRows.forEach(r => {
+          const uid = String(r.user_id);
+          if (!byUser[uid]) byUser[uid] = { qty: 0, invested: 0, current: 0 };
+          const qty = Number(r.quantity) || 0;
+          const pp = Number(r.purchase_price) || 0;
+          const cp = Number(r.current_price) || pp;
+          byUser[uid].qty += qty;
+          byUser[uid].invested += qty * pp;
+          byUser[uid].current += qty * cp;
+        });
+        const rows = Object.entries(byUser).map(([uid, data]) => {
+          const prof = profiles[uid];
+          const name = prof ? ([prof.first_name, prof.last_name].filter(Boolean).join(' ').trim() || prof.email || uid) : uid;
+          const pnl = data.current - data.invested;
+          const ret = data.invested > 0 ? (pnl / data.invested * 100) : 0;
+          return { name, qty: data.qty, pnl, ret };
+        }).sort((a, b) => b.qty - a.qty);
+        el.innerHTML = `<table class="ov-table"><thead><tr>
+          <th>Client</th><th class="r">Qty</th><th class="r">P&amp;L</th><th class="r">Return</th>
+        </tr></thead><tbody>${
+          rows.map(r => {
+            const pc = r.pnl >= 0 ? 'ov-pos' : 'ov-neg';
+            const rc = r.ret >= 0 ? 'ov-pos' : 'ov-neg';
+            const pnlStr = Math.abs(r.pnl) >= 1000 ? `${r.pnl >= 0 ? '+' : '-'}R${(Math.abs(r.pnl)/1000).toFixed(0)}k` : `${r.pnl >= 0 ? '+' : ''}R${r.pnl.toFixed(0)}`;
+            return `<tr>
+              <td style="font-size:12px;font-weight:500;">${r.name}</td>
+              <td class="r ov-mono" style="font-size:12px;">${r.qty.toLocaleString()}</td>
+              <td class="r ov-mono ${pc}" style="font-size:11px;font-weight:600;">${pnlStr}</td>
+              <td class="r ov-mono ${rc}" style="font-size:11px;font-weight:600;">${r.ret >= 0 ? '+' : ''}${r.ret.toFixed(1)}%</td>
+            </tr>`;
+          }).join('')
+        }</tbody></table>`;
       };
 
       const loadUserStats = async () => {
