@@ -1770,19 +1770,16 @@
         });
       };
 
-      tabOverview.addEventListener("click", async () => {
+      tabOverview.addEventListener("click", () => {
         window.__dbgBreadcrumb('tab:overview:click');
-        if (!(await checkUnsavedChanges())) return;
         switchTab(tabOverview);
         window.__dbgBreadcrumb('tab:overview:switchTab:done');
       });
-      tabStrategies.addEventListener("click", async () => {
-        if (!(await checkUnsavedChanges())) return;
+      tabStrategies.addEventListener("click", () => {
         switchTab(tabStrategies);
         loadAllSecurities();
       });
-      tabFactsheets.addEventListener("click", async () => {
-        if (!(await checkUnsavedChanges())) return;
+      tabFactsheets.addEventListener("click", () => {
         switchTab(tabFactsheets);
         renderFactsheetStrategyList();
       });
