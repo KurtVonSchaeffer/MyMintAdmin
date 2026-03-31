@@ -1538,9 +1538,9 @@
       const setWorkspaceReadOnly = (readOnly) => {
         strategyViewOnlyMode = readOnly;
 
-        /* save button */
+        /* save button — when exiting read-only, only show if there are holdings */
         const saveBtn = document.getElementById("strategySubmitBtn");
-        if (saveBtn) saveBtn.style.display = readOnly ? "none" : "";
+        if (saveBtn) saveBtn.style.display = (readOnly || formHoldings.length === 0) ? "none" : "";
 
         /* search section */
         const searchSection = document.getElementById("strategySearchSection");
@@ -2542,6 +2542,7 @@
       };
       const removeHolding = (index) => {
         formHoldings.splice(index, 1);
+        _stratDirty = true;
         if (formHoldings.length === 0 && !activeStrategyTabId) {
           setStrategyWorkspaceVisible(false);
         }
@@ -2608,6 +2609,10 @@
       };
 
       const renderFormHoldings = () => {
+        /* Show/hide the submit button based on whether there are holdings */
+        const _sbtn = document.getElementById("strategySubmitBtn");
+        if (_sbtn) _sbtn.style.display = formHoldings.length > 0 ? "" : "none";
+
         if (formHoldings.length === 0) {
           holdingsContainer.innerHTML = `
           <tr>
@@ -3881,7 +3886,7 @@
 
       /* Returns true if it's safe to navigate away (no unsaved changes, or user chose Leave) */
       const checkUnsavedChanges = () => new Promise((resolve) => {
-        if (!_stratDirty || formHoldings.length === 0) { resolve(true); return; }
+        if (!_stratDirty) { resolve(true); return; }
         const modal = document.getElementById('unsavedChangesModal');
         const stayBtn  = document.getElementById('unsavedStayBtn');
         const leaveBtn = document.getElementById('unsavedLeaveBtn');
