@@ -1284,7 +1284,6 @@
       <div class="modal-content" id="strategyModalContent"></div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
     <script>
@@ -2096,7 +2095,8 @@
           return;
         }
 
-        const chart = echarts.init(strategyChart, null, { renderer: "canvas" });
+        let chart;
+        try { chart = echarts.init(strategyChart, null, { renderer: "canvas" }); } catch(e) { console.error('[Chart] ECharts init failed:', e); return; }
         strategyChart.__echartsInstance = chart;
 
         const items = (strategies || []).map((strategy, index) => ({
@@ -3658,7 +3658,7 @@
         allStrategiesData = strategies;
         allStrategiesFullData = strategies;
         renderTopAssetsRow(); // re-rank cards now that strategy usage counts are known
-        loadStrategyInvestorData(); // async: determines which strategies have real investors
+        loadStrategyInvestorData().catch(err => console.error('[Init] loadStrategyInvestorData failed:', err));
 
         // Build live securities price map for overview min investment display
         const _allSyms = [
@@ -3713,9 +3713,9 @@
           featuredCount.textContent = `${featured.length} featured`;
         if (totalCount) totalCount.textContent = `${strategies.length} total`;
 
-        applyStrategiesFiltersAndRender();
+        applyStrategiesFiltersAndRender().catch(err => console.error('[Init] filter render failed:', err));
         updateStrategyBadges();
-        loadSectors();
+        loadSectors().catch(err => console.error('[Init] loadSectors failed:', err));
         initOverviewDashboard(strategies, _overviewSecMap).catch(err => console.error('[Overview] init error:', err));
       };
 
@@ -3966,7 +3966,7 @@
           }
         }
 
-        _ovPerfChartInst = echarts.init(el, null, { renderer: 'canvas' });
+        try { _ovPerfChartInst = echarts.init(el, null, { renderer: 'canvas' }); } catch(e) { console.error('[Overview] ECharts init failed:', e); return; }
         const hasBench = benchVals.some(v => v != null);
         _ovPerfChartInst.setOption({
           animation: true, animationDuration: 600,
@@ -4030,7 +4030,7 @@
           itemStyle: { color: colors[i % colors.length] },
         }));
 
-        _ovSectorChartInst = echarts.init(el, null, { renderer: 'canvas' });
+        try { _ovSectorChartInst = echarts.init(el, null, { renderer: 'canvas' }); } catch(e) { console.error('[Overview] Sector chart init failed:', e); return; }
         _ovSectorChartInst.setOption({
           animation: false,
           tooltip: {
@@ -5517,12 +5517,16 @@
       }
 
       (async () => {
-        const { data: { session } } = await supabaseClient.auth.getSession();
-        const email = session?.user?.email || "";
-        const nameEl = document.getElementById("sidebarUserEmail");
-        const avatarEl = document.getElementById("sidebarAvatarInitials");
-        if (nameEl && email) nameEl.textContent = email;
-        if (avatarEl && email) avatarEl.textContent = email.charAt(0).toUpperCase();
+        try {
+          const { data } = await supabaseClient.auth.getSession();
+          const email = data?.session?.user?.email || "";
+          const nameEl = document.getElementById("sidebarUserEmail");
+          const avatarEl = document.getElementById("sidebarAvatarInitials");
+          if (nameEl && email) nameEl.textContent = email;
+          if (avatarEl && email) avatarEl.textContent = email.charAt(0).toUpperCase();
+        } catch (err) {
+          console.error('[Sidebar] session load failed:', err);
+        }
       })();
 
       if (allStrategiesFilter)
@@ -5619,9 +5623,9 @@
       window.addEventListener("DOMContentLoaded", async function () {
         const ok = await requireSession();
         if (!ok) return;
-        loadStrategies();
-        loadTopHoldings();
-        loadUserStats();
+        loadStrategies().catch(err => console.error('[Init] loadStrategies failed:', err));
+        loadTopHoldings().catch(err => console.error('[Init] loadTopHoldings failed:', err));
+        loadUserStats().catch(err => console.error('[Init] loadUserStats failed:', err));
       });
 
       /* ═══════════════════════════════════════════════════════════════════
