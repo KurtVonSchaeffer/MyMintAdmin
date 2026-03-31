@@ -2226,9 +2226,9 @@
           ],
         };
 
-        chart.setOption(option);
+        try { chart.setOption(option); } catch(e) { console.error('[Chart] setOption failed:', e); }
 
-        const resizeObserver = new ResizeObserver(() => chart.resize());
+        const resizeObserver = new ResizeObserver(() => { try { chart.resize(); } catch(e) {} });
         resizeObserver.observe(strategyChart);
         strategyChart.__strategyChartResizeObserver = resizeObserver;
       };
@@ -3968,43 +3968,47 @@
 
         try { _ovPerfChartInst = echarts.init(el, null, { renderer: 'canvas' }); } catch(e) { console.error('[Overview] ECharts init failed:', e); return; }
         const hasBench = benchVals.some(v => v != null);
-        _ovPerfChartInst.setOption({
-          animation: true, animationDuration: 600,
-          grid: { top: 8, right: 12, bottom: 28, left: 46 },
-          tooltip: {
-            trigger: 'axis', backgroundColor: '#0f172a', borderColor: '#1e293b',
-            textStyle: { color: '#f8fafc', fontSize: 11 },
-            formatter: (params) => {
-              let s = `<div style="font-size:10px;color:#94a3b8;margin-bottom:4px;">${params[0]?.axisValue}</div>`;
-              params.forEach(p => { s += `<div style="color:${p.color}">${p.seriesName}: <b>${Number(p.value) >= 0 ? '+' : ''}${Number(p.value).toFixed(2)}%</b></div>`; });
-              return s;
-            }
-          },
-          xAxis: {
-            type: 'category', data: stratDates,
-            axisLine: { lineStyle: { color: '#e2e8f0' } },
-            axisLabel: { fontSize: 10, color: '#94a3b8', formatter: v => v ? v.slice(5) : '' },
-            axisTick: { show: false },
-          },
-          yAxis: {
-            type: 'value',
-            axisLabel: { fontSize: 10, color: '#94a3b8', formatter: v => `${v > 0 ? '+' : ''}${v}%` },
-            splitLine: { lineStyle: { color: '#f1f5f9', type: 'dashed' } },
-          },
-          series: [
-            {
-              name: 'Strategy', type: 'line', data: stratVals, smooth: true, symbol: 'none',
-              lineStyle: { color: '#2563eb', width: 2 },
-              areaStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(37,99,235,0.15)' }, { offset: 1, color: 'rgba(37,99,235,0)' }] } },
+        try {
+          _ovPerfChartInst.setOption({
+            animation: false,
+            grid: { top: 8, right: 12, bottom: 28, left: 46 },
+            tooltip: {
+              trigger: 'axis', backgroundColor: '#0f172a', borderColor: '#1e293b',
+              textStyle: { color: '#f8fafc', fontSize: 11 },
+              formatter: (params) => {
+                try {
+                  let s = `<div style="font-size:10px;color:#94a3b8;margin-bottom:4px;">${params[0]?.axisValue}</div>`;
+                  params.forEach(p => { s += `<div style="color:${p.color}">${p.seriesName}: <b>${Number(p.value) >= 0 ? '+' : ''}${Number(p.value).toFixed(2)}%</b></div>`; });
+                  return s;
+                } catch(e) { return ''; }
+              }
             },
-            hasBench ? {
-              name: 'JSE ALSI', type: 'line', data: benchVals, smooth: true, symbol: 'none',
-              lineStyle: { color: '#cbd5e1', width: 1.5, type: 'dashed' },
-            } : null,
-          ].filter(Boolean),
-        });
+            xAxis: {
+              type: 'category', data: stratDates,
+              axisLine: { lineStyle: { color: '#e2e8f0' } },
+              axisLabel: { fontSize: 10, color: '#94a3b8', formatter: v => v ? v.slice(5) : '' },
+              axisTick: { show: false },
+            },
+            yAxis: {
+              type: 'value',
+              axisLabel: { fontSize: 10, color: '#94a3b8', formatter: v => `${v > 0 ? '+' : ''}${v}%` },
+              splitLine: { lineStyle: { color: '#f1f5f9', type: 'dashed' } },
+            },
+            series: [
+              {
+                name: 'Strategy', type: 'line', data: stratVals, smooth: false, symbol: 'none',
+                lineStyle: { color: '#2563eb', width: 2 },
+                areaStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(37,99,235,0.15)' }, { offset: 1, color: 'rgba(37,99,235,0)' }] } },
+              },
+              hasBench ? {
+                name: 'JSE ALSI', type: 'line', data: benchVals, smooth: false, symbol: 'none',
+                lineStyle: { color: '#cbd5e1', width: 1.5, type: 'dashed' },
+              } : null,
+            ].filter(Boolean),
+          });
+        } catch(e) { console.error('[Overview] Perf chart setOption failed:', e); }
         if (_ovPerfResizeObs) { try { _ovPerfResizeObs.disconnect(); } catch(e) {} }
-        _ovPerfResizeObs = new ResizeObserver(() => _ovPerfChartInst && _ovPerfChartInst.resize());
+        _ovPerfResizeObs = new ResizeObserver(() => { try { if (_ovPerfChartInst) _ovPerfChartInst.resize(); } catch(e) {} });
         _ovPerfResizeObs.observe(el);
       };
 
@@ -4031,19 +4035,21 @@
         }));
 
         try { _ovSectorChartInst = echarts.init(el, null, { renderer: 'canvas' }); } catch(e) { console.error('[Overview] Sector chart init failed:', e); return; }
-        _ovSectorChartInst.setOption({
-          animation: false,
-          tooltip: {
-            trigger: 'item', backgroundColor: '#0f172a', borderColor: '#1e293b',
-            textStyle: { color: '#f8fafc', fontSize: 11 },
-            formatter: p => `${p.name}: <b>${p.value}%</b>`,
-          },
-          series: [{
-            type: 'pie', radius: ['50%', '80%'], center: ['50%', '50%'],
-            data: pieData, label: { show: false },
-            emphasis: { label: { show: true, fontSize: 11, fontWeight: 600 } },
-          }],
-        });
+        try {
+          _ovSectorChartInst.setOption({
+            animation: false,
+            tooltip: {
+              trigger: 'item', backgroundColor: '#0f172a', borderColor: '#1e293b',
+              textStyle: { color: '#f8fafc', fontSize: 11 },
+              formatter: p => { try { return `${p.name}: <b>${p.value}%</b>`; } catch(e) { return ''; } },
+            },
+            series: [{
+              type: 'pie', radius: ['50%', '80%'], center: ['50%', '50%'],
+              data: pieData, label: { show: false },
+              emphasis: { label: { show: true, fontSize: 11, fontWeight: 600 } },
+            }],
+          });
+        } catch(e) { console.error('[Overview] Sector chart setOption failed:', e); }
         if (legend) {
           legend.innerHTML = pieData.slice(0, 8).map(d =>
             `<div style="display:flex;align-items:center;justify-content:space-between;font-size:11px;">
@@ -4055,7 +4061,9 @@
             </div>`
           ).join('');
         }
-        new ResizeObserver(() => _ovSectorChartInst && _ovSectorChartInst.resize()).observe(el);
+        if (el.__sectorResizeObs) { try { el.__sectorResizeObs.disconnect(); } catch(e) {} }
+        el.__sectorResizeObs = new ResizeObserver(() => { try { if (_ovSectorChartInst) _ovSectorChartInst.resize(); } catch(e) {} });
+        el.__sectorResizeObs.observe(el);
       };
 
       const ovRenderHoldings = (holdings, secMap) => {
