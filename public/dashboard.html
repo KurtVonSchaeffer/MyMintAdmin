@@ -3978,6 +3978,12 @@
           </div>`;
         };
         track.innerHTML = [...items, ...items].map(renderTickerItem).join('');
+        requestAnimationFrame(() => {
+          const halfWidth = track.scrollWidth / 2;
+          const pxPerSec = 30;
+          const dur = Math.round(halfWidth / pxPerSec);
+          track.style.animationDuration = dur + 's';
+        });
         clearInterval(_ovTickerInterval);
         _ovTickerInterval = setInterval(() => {
           const t = document.getElementById('ovTickerTrack');
@@ -3990,6 +3996,11 @@
             return item;
           });
           t.innerHTML = [...updated, ...updated].map(renderTickerItem).join('');
+          requestAnimationFrame(() => {
+            const halfWidth = t.scrollWidth / 2;
+            const pxPerSec = 30;
+            t.style.animationDuration = Math.round(halfWidth / pxPerSec) + 's';
+          });
         }, 5000);
       };
 
