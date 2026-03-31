@@ -3276,8 +3276,15 @@
             (s) => s.id === activeStrategyTabId,
           );
           if (saved) {
-            setStrategyWorkspaceVisible(true);
-            await editStrategy(saved, globalSecuritiesMap);
+            if (_ovStratFromDropdownCreate) {
+              /* Strategy was created from the dropdown — switch to overview metrics view */
+              _ovStratFromDropdownCreate = false;
+              const idx = _ovAllStrategies.findIndex(s => s.id === activeStrategyTabId);
+              if (idx !== -1) await _doOvSelectStrategy(idx, saved);
+            } else {
+              setStrategyWorkspaceVisible(true);
+              await editStrategy(saved, globalSecuritiesMap);
+            }
           }
         }
       };
@@ -3829,6 +3836,7 @@
       let _ovAllStrategies = [];
       let _ovSecMap = new Map();
       let _ovPerfChartInst = null;
+      let _ovStratFromDropdownCreate = false; // true when strategy created via dropdown prompt
       let _ovSectorChartInst = null;
       let _ovTickerInterval = null;
       let _ovPerfResizeObs = null;
@@ -4085,16 +4093,24 @@
           return;
         }
         const newId = insertData.id;
-        /* Refresh strategy list — initOverviewDashboard will run but we override it right after */
-        await loadStrategies();
-        /* Find the newly created strategy and show its overview metrics view */
-        const saved = (allStrategiesFullData || []).find(s => s.id === newId);
-        if (saved) {
-          const idx = _ovAllStrategies.findIndex(s => s.id === newId);
-          if (idx !== -1) {
-            await _doOvSelectStrategy(idx, saved);
-          }
-        }
+        const minimalStrat = { id: newId, name, slug: createStrategySlug(name), status: 'active', is_public: false, is_featured: false, holdings: [] };
+        /* Inject into local arrays so renderStrategyTabs / editStrategy can find it immediately */
+        allStrategiesFullData = [minimalStrat, ...(allStrategiesFullData || [])];
+        _ovAllStrategies      = [minimalStrat, ...(_ovAllStrategies      || [])];
+        activeStrategyTabId   = newId;
+        _ovStratFromDropdownCreate = true;
+        /* Show strategy management form — user adds assets then saves */
+        const sp = document.getElementById('tabStrategiesPanel');
+        if (sp) sp.style.display = 'block';
+        const sc = document.getElementById('ovStratContent');
+        if (sc) sc.style.display = 'none';
+        setStrategyWorkspaceVisible(true);
+        renderStrategyTabs();
+        await editStrategy(minimalStrat, globalSecuritiesMap);
+        /* Update dropdown label */
+        const btnLabel = document.getElementById('ovStratBtnLabel');
+        if (btnLabel) btnLabel.textContent = name;
+        ovBuildStratDrop();
       };
 
       const ovRenderTitleBar = (strat, analytics, aum, investorCount) => {
