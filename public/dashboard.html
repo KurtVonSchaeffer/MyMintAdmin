@@ -1770,20 +1770,24 @@
         });
       };
 
-      tabOverview.addEventListener("click", () => {
+      tabOverview.addEventListener("click", async () => {
         window.__dbgBreadcrumb('tab:overview:click');
+        if (!(await checkUnsavedChanges())) return;
         switchTab(tabOverview);
         window.__dbgBreadcrumb('tab:overview:switchTab:done');
       });
-      tabStrategies.addEventListener("click", () => {
+      tabStrategies.addEventListener("click", async () => {
+        if (!(await checkUnsavedChanges())) return;
         switchTab(tabStrategies);
         loadAllSecurities();
       });
-      tabFactsheets.addEventListener("click", () => {
+      tabFactsheets.addEventListener("click", async () => {
+        if (!(await checkUnsavedChanges())) return;
         switchTab(tabFactsheets);
         renderFactsheetStrategyList();
       });
-      window.openRebalancingModal = () => {
+      window.openRebalancingModal = async () => {
+        if (!(await checkUnsavedChanges())) return;
         const modal = document.getElementById('rebalancingModal');
         modal.classList.remove('hidden');
         rebInitStrategySelector();
@@ -3882,7 +3886,7 @@
       let _stratDirty = false; // true when holdings have been modified but not saved
 
       /* Returns true if it's safe to navigate away (no unsaved changes, or user chose Leave) */
-      const checkUnsavedChanges = () => new Promise((resolve) => {
+      const checkUnsavedChanges = window.checkUnsavedChanges = () => new Promise((resolve) => {
         if (!_stratDirty) { resolve(true); return; }
         const modal = document.getElementById('unsavedChangesModal');
         const stayBtn  = document.getElementById('unsavedStayBtn');
@@ -4088,6 +4092,7 @@
       };
 
       window.ovSelectStrategy = async (val) => {
+        if (!(await checkUnsavedChanges())) return;
         const idx = Number(val) || 0;
         const strat = _ovAllStrategies[idx];
         if (!strat) { window.__dbgBreadcrumb('ovSelect:no-strat'); return; }
@@ -4133,6 +4138,7 @@
       };
 
       window.ovConfirmNewStrategy = async () => {
+        if (!(await checkUnsavedChanges())) return;
         const inp = document.getElementById('_ovNewStratNameInput');
         const errEl = document.getElementById('_ovNewStratErr');
         const btn = document.getElementById('_ovNewStratConfirm');
@@ -5900,6 +5906,7 @@
       const signOutBtn = document.getElementById("signOutBtn");
       if (signOutBtn) {
         signOutBtn.addEventListener("click", async () => {
+          if (!(await checkUnsavedChanges())) return;
           await supabaseClient.auth.signOut();
           window.location.href = "/signin.html";
         });
@@ -7967,9 +7974,16 @@
         var href = link.getAttribute('href');
         if (!href || href === '#') return;
         e.preventDefault();
-        h.style.transition = 'opacity 0.12s ease';
-        h.style.opacity = '0';
-        setTimeout(function() { window.location.href = href; }, 120);
+        var doNav = function() {
+          h.style.transition = 'opacity 0.12s ease';
+          h.style.opacity = '0';
+          setTimeout(function() { window.location.href = href; }, 120);
+        };
+        if (typeof window.checkUnsavedChanges === 'function') {
+          window.checkUnsavedChanges().then(function(ok) { if (ok) doNav(); });
+        } else {
+          doNav();
+        }
       });
     })();
   </script>
