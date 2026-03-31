@@ -981,10 +981,26 @@ process.on('unhandledRejection', (reason) => {
   console.error('[Process] Unhandled promise rejection:', reason?.message || reason);
 });
 
-server.listen(port, () => {
-  console.log(`Server running at http://localhost:${port}`);
-  if (orderbookEnableIntervalScheduler) {
-    startDailyOrderbookScheduler();
+const startServer = (portToUse) => {
+  server.listen(portToUse, () => {
+    console.log(`Server running at http://localhost:${portToUse}`);
+    if (orderbookEnableIntervalScheduler) {
+      startDailyOrderbookScheduler();
+    }
+    startMarketDataScheduler();
+  });
+};
+
+let _startRetries = 0;
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE' && _startRetries < 5) {
+    _startRetries++;
+    console.error(`[Server] Port ${port} in use — retry ${_startRetries}/5 in 2s...`);
+    setTimeout(() => startServer(port), 2000);
+  } else {
+    console.error('[Server] HTTP server error:', err?.message || err);
+    process.exit(1);
   }
-  startMarketDataScheduler();
 });
+
+startServer(port);
