@@ -2274,24 +2274,30 @@
     .top-nav {
       background: #ffffff;
       border-bottom: 1px solid var(--border);
-      padding: 12px 24px 10px;
+      padding: 0 24px;
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      align-items: stretch;
+      justify-content: flex-start;
+      gap: 0;
       position: sticky;
       top: 0;
       z-index: 50;
+      min-height: unset;
     }
     .top-nav-row1 {
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 12px;
+      padding: 10px 0 8px;
+      border-bottom: 1px solid #f1f5f9;
     }
     .top-nav-row2 {
       display: flex;
       align-items: center;
-      gap: 2px;
+      gap: 0;
+      padding: 6px 0;
     }
 
     .filter-bar .top-search {
@@ -2943,9 +2949,9 @@
     /* ── Title row ── */
     .clients-top-row { margin-bottom: 0; }
     .clients-title-inline { display: flex; align-items: center; gap: 10px; }
-    .top-nav .filter-bar { background: none; border: none; border-radius: 0; padding: 0; margin: 0; box-shadow: none; }
+    .top-nav .filter-bar { background: none; border: none; border-radius: 0; padding: 0; margin: 0; box-shadow: none; justify-content: flex-start; }
     .top-search { position: relative; }
-    .top-nav-row1 .top-search { min-width: 200px; max-width: 240px; }
+    .top-nav-row1 .top-search { min-width: 190px; max-width: 230px; }
 
     /* Count badge — inline with title */
     .user-count-badge { background: #f0eeff !important; border: 1px solid #e0d9ff !important; border-radius: 999px !important; padding: 3px 11px !important; font-size: 12px !important; font-weight: 600 !important; color: #5b21b6 !important; box-shadow: none !important; cursor: default !important; display: inline-flex !important; align-items: center !important; gap: 5px !important; }
