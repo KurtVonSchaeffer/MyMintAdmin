@@ -1295,6 +1295,10 @@
         console.log('[DBG]', label);
       };
       window.addEventListener('error', function(e) {
+        if (e.message && e.message.includes('ResizeObserver loop')) {
+          e.preventDefault();
+          return;
+        }
         const msg = `UNCAUGHT ERROR\n  message: ${e.message}\n  source:  ${e.filename}\n  line:    ${e.lineno}:${e.colno}\n  error:   ${e.error?.stack || e.error || '(null)'}`;
         console.error('[DBG] ' + msg);
         console.error('[DBG] breadcrumbs:', JSON.stringify(window.__dbgLog.slice(-10)));
